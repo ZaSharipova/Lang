@@ -30,7 +30,6 @@
    N          ::= Number +
 */
 
-
 namespace paracl::parser {
 
 using NodePtr = std::unique_ptr<INode>;
@@ -45,7 +44,7 @@ public:
 
 private:
     NodePtr GetFunctionDeclare();
-    NodePtr GetFunctionCall();
+    NodePtr GetFunctionCall(bool hasToBeSemicolon);
     NodePtr GetWhile();
     NodePtr GetIf();
     NodePtr GetElse();

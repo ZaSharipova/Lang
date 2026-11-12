@@ -11,7 +11,7 @@
 /* G          ::= FUNCTION_D+
    FUNCTION_D ::= V "(" [ E {"," E}* ] ")" "{" OP* "}"
 
-   OP         ::= RETURN | PRINTF | SCANF | WHILE | IF | CALL;
+   OP         ::= RETURN | PRINTF | SCANF | WHILE | IF | CALL
 
    RETURN     ::= "return" E ";"
    PRINTF     ::= ("write" | "write_char") "(" (V | N) ")" ";"
@@ -24,7 +24,7 @@
 
    E          ::= T ([+-] T)* +
    T          ::= P ([*:/] P)* +
-   P          ::= IntLiteral | Identifier | '(' E ')' +
+   P          ::= '(' E ')' | CALL | Identifier | IntLiteral
 
    V          ::= Variable +
    N          ::= Number +
@@ -86,16 +86,16 @@ NodePtr Parser::GetFunctionDeclare() {
     return std::make_unique<FunctionNode>(std::move(name), std::move(args), std::move(body));
 }
 
-NodePtr Parser::GetFunctionCall() {
+NodePtr Parser::GetFunctionCall(bool hasToBeSemicolon) {  // NOLINT(misc-no-recursion)
     const lexer::Token name_token = GetToken();
     if (!IsThatTokenType(lexer::TokenType::kIdentifier)) {
-        std::cerr << "Error while parsing function declaration: there is no function name\n";
+        std::cerr << "Error while parsing function call: there is no function name\n";
         return nullptr;
     }
     std::string name = lexer_->TokenToStr(name_token);
 
     if (!IsThatTokenType(lexer::TokenType::kLParen)) {
-        std::cerr << "Error while parsing function declaration: there's no '('\n";
+        std::cerr << "Error while parsing function call: there's no '('\n";
         return nullptr;
     }
 
@@ -113,11 +113,11 @@ NodePtr Parser::GetFunctionCall() {
     }
 
     if (!IsThatTokenType(lexer::TokenType::kRParen)) {
-        std::cerr << "Error while parsing function declaration: there's no ')'\n";
+        std::cerr << "Error while parsing function call: there's no ')'\n";
         return nullptr;
     }
 
-    if (!IsThatTokenType(lexer::TokenType::kSemicolon)) {
+    if (hasToBeSemicolon && !IsThatTokenType(lexer::TokenType::kSemicolon)) {
         std::cerr << "Error: there is no ';'\n";
         return nullptr;
     }
@@ -296,6 +296,10 @@ NodePtr Parser::GetPrimary() { // NOLINT(misc-no-recursion)
         return nullptr;
     }
 
+    if (GetToken().type == lexer::TokenType::kIdentifier && SeeNextToken().type == lexer::TokenType::kLParen) {
+        return GetFunctionCall(false);
+    }
+
     NodePtr variable = GetIdentifier();
     if (variable) {
         return variable;
@@ -389,7 +393,7 @@ NodePtr Parser::GetOp() { // NOLINT(misc-no-recursion)
             return GetAssign();
         }
 
-        return GetFunctionCall();
+        return GetFunctionCall(true);
 
         // case lexer::TokenType::kKeyWordScan: // TODO пока скип
         //     return GetScan();
@@ -451,12 +455,12 @@ bool Parser::IsThatTokenType(lexer::TokenType type) {
         return false;
     }
 
-    pos_++;
+    IncreaseTokensPos();
     return true;
 }
 
 void Parser::IncreaseTokensPos() {
-    assert(pos_ <= tokens_.size());
+    assert(pos_ < tokens_.size());
     pos_++;
 }
 
