@@ -5,30 +5,45 @@
 #include <vector>
 #include <charconv>
 #include <cctype>
+#include <unordered_map>
+#include <string>
+#include <string_view>
 
 namespace paracl::lexer {
 
-static const char kOpenCommentChars[] = "/*";
-static const char kCloseCommentChars[] = "*/";
+static inline std::unordered_map<std::string, TokenType> g_kKeyWords = {
+    {"if", TokenType::kKeyWordIf},
+    {"else", TokenType::kKeyWordElse},
+    {"while", TokenType::kKeyWordWhile},
+    {"return", TokenType::kKeyWordReturn},
+    {"print", TokenType::kKeyWordPrint},
+};
 
-static bool IsSpace(char c) {
-    return std::isspace(static_cast<unsigned char>(c));
+static const char g_kOpenCommentChars[] = "/*";
+static const char g_kCloseCommentChars[] = "*/";
+
+namespace {
+
+bool IsSpace(char character) {
+    return std::isspace(static_cast<unsigned char>(character)) != 0;
 }
 
-static bool IsDigit(char c) {
-    return std::isdigit(static_cast<unsigned char>(c)) || c == '_';
+bool IsDigit(char character) {
+    return std::isdigit(static_cast<unsigned char>(character)) != 0;
 }
 
-static bool IsAlpha(char c) {
-    return std::isalpha(static_cast<unsigned char>(c));
+bool IsAlpha(char character) {
+    return (std::isalpha(static_cast<unsigned char>(character)) != 0) || character == '_';
 }
 
-static bool IsAlnum(char c) {
-    return IsAlpha(c) || IsDigit(c);
+bool IsAlnum(char character) {
+    return IsAlpha(character) || IsDigit(character);
 }
+
+} // namespace anonymous
 
 SourceBuffer SourceBuffer::FromFile(const char* filepath) {
-    std::ifstream file(filepath, std::ios::ate);
+    std::ifstream file(filepath, std::ios::ate | std::ios::binary);
     if (!file.is_open()) {
         throw std::runtime_error(std::string("file") + filepath + "didnt open");
     }
@@ -49,24 +64,25 @@ SourceBuffer SourceBuffer::FromFile(const char* filepath) {
 
     buffer[size] = '\0';
 
-    SourceBuffer::BuildNewLines();
+    SourceBuffer sourceBuf(buffer);
+    sourceBuf.BuildNewLines();
 
-    return buffer;
+    return sourceBuf;
 }
 
 SourceBuffer SourceBuffer::FromString(const std::string& str) {
     std::vector<char> buffer(str.begin(), str.end());
     buffer.push_back('\0');
 
-    SourceBuffer sb(buffer);
-    SourceBuffer::BuildNewLines();
+    SourceBuffer sourceBuf(buffer);
+    sourceBuf.BuildNewLines();
 
-    return sb;
+    return sourceBuf;
 }
 
-int64_t Lexer::TokenToNum(Token token, const SourceBuffer& buffer) {
+int64_t Lexer::TokenToNum(Token token) const {
     int64_t value = 0;
-    auto [ptr, ec] = std::from_chars(buffer.data() + token.offset, buffer.data() + token.offset + token.len, value);
+    auto [ptr, ec] = std::from_chars(buffer_.data() + token.offset, buffer_.data() + token.offset + token.len, value);
     if (ec == std::errc{}) {
         return value;
     }
@@ -74,31 +90,31 @@ int64_t Lexer::TokenToNum(Token token, const SourceBuffer& buffer) {
     return -1;
 }
 
-std::string Lexer::TokenToStr(Token token, const SourceBuffer& buffer) {
-    std::string str(buffer.data() + token.offset, token.len);
+std::string Lexer::TokenToStr(Token token) const {
+    std::string str(buffer_.data() + token.offset, token.len);
     return str;
 }
 
 void Lexer::SkipUselessText() {
     while (buffer_[cursor_] != '\0') {
-        if (IsSpace(buffer_[cursor_])) {
+        if (IsSpace(buffer_[cursor_]) != 0) {
             cursor_++;
             continue;
         }
 
         if (buffer_[cursor_] == '/' && buffer_[cursor_ + 1] == '/') {
-            cursor_ += 2;
+            cursor_ += sizeof(g_kCloseCommentChars) - 1;
             while (buffer_[cursor_] != '\n' && buffer_[cursor_] != '\0') {
                 cursor_++;
             }
             continue;
         }
 
-        if (buffer_[cursor_] == kOpenCommentChars[0] && buffer_[cursor_ + 1] == kOpenCommentChars[1]) {
-            cursor_ += 2;
+        if (buffer_[cursor_] == g_kOpenCommentChars[0] && buffer_[cursor_ + 1] == g_kOpenCommentChars[1]) {
+            cursor_ += sizeof(g_kOpenCommentChars) - 1;
             while (cursor_ < buffer_.size()) {
-                if (buffer_[cursor_] == kCloseCommentChars[0] && buffer_[cursor_ + 1] == kCloseCommentChars[1]) {
-                    cursor_ += 2;
+                if (buffer_[cursor_] == g_kCloseCommentChars[0] && buffer_[cursor_ + 1] == g_kCloseCommentChars[1]) {
+                    cursor_ += sizeof(g_kCloseCommentChars) - 1;
                     break;
                 }
                 cursor_++;
@@ -114,14 +130,14 @@ Token Lexer::NextToken() {
     SkipUselessText();
     
     if (cursor_ == static_cast<std::size_t>(buffer_.size())) {
-        return Token{TokenType::kEof, static_cast<uint32_t>(cursor_), 0};
+        return Token(TokenType::kEof, static_cast<uint32_t>(cursor_), 0);
     }
 
-    if (IsAlpha(buffer_[cursor_])) {
+    if (IsAlpha(buffer_[cursor_]) != 0) {
         return LexIdentifierOrKeyword();
     }
 
-    if (IsDigit(buffer_[cursor_])) {
+    if (IsDigit(buffer_[cursor_]) != 0) {
         return LexNumber();
     }
 
@@ -130,48 +146,40 @@ Token Lexer::NextToken() {
 
 Token Lexer::LexIdentifierOrKeyword() {
     std::size_t start = cursor_;
-    while (IsAlnum(buffer_[cursor_])) {
+    while (IsAlnum(buffer_[cursor_]) != 0) {
         cursor_++;
     }
 
-    uint32_t offset = static_cast<uint32_t>(start);
-    uint32_t len = static_cast<uint32_t>(cursor_ - start);
+    auto offset = static_cast<uint32_t>(start);
+    auto len = static_cast<uint32_t>(cursor_ - start);
 
     std::string identifier(buffer_.data() + offset, len);
     TokenType type = TokenType::kIdentifier;
-    if (identifier == "if") {
-        type = TokenType::kKeyWordIf;
-    } else if (identifier == "else") {
-        type = TokenType::kKeyWordElse;
-    } else if (identifier == "while") {
-        type = TokenType::kKeyWordWhile;
-    } else if (identifier == "return") {
-        type = TokenType::kKeyWordReturn;
-    } else if (identifier == "print") {
-        type = TokenType::kKeyWordPrint;
+    if (g_kKeyWords.contains(identifier)) {
+        type = g_kKeyWords[identifier];
     }
     
-    return Token{type, offset, len};
+    return Token(type, offset, len);
 }
 
 Token Lexer::LexNumber() {
     std::size_t start = cursor_;
-    while (IsDigit(buffer_[cursor_])) {
+    while (IsDigit(buffer_[cursor_]) != 0) {
         cursor_++;
     }
 
-    uint32_t offset = static_cast<uint32_t>(start);
-    uint32_t len = static_cast<uint32_t>(cursor_ - start);
+    auto offset = static_cast<uint32_t>(start);
+    auto len = static_cast<uint32_t>(cursor_ - start);
     
-    if (IsAlpha(buffer_[cursor_])) {
-        while (IsAlnum(buffer_[cursor_])) {
+    if (IsAlpha(buffer_[cursor_]) != 0) {
+        while (IsAlnum(buffer_[cursor_]) != 0) {
             cursor_++;
         }
         len = static_cast<uint32_t>(cursor_ - start);
-        return Token{TokenType::kError, offset, len};
+        return Token(TokenType::kError, offset, len);
     }
 
-    return Token{TokenType::kIntLiteral, offset, len};
+    return Token(TokenType::kIntLiteral, offset, len);
 }
 
 Token Lexer::LexPunctuation() {
@@ -179,8 +187,8 @@ Token Lexer::LexPunctuation() {
     uint32_t len = 1;
     TokenType type = TokenType::kError;
 
-    char c = buffer_[cursor_++];
-    switch (c) {
+    char character = buffer_[cursor_++];
+    switch (character) {
         case '?': type = TokenType::kQuestion; break;
         case '+': type = TokenType::kPlus; break;
         case '-': type = TokenType::kMinus; break;
@@ -236,7 +244,7 @@ Token Lexer::LexPunctuation() {
         default: break;
     }
 
-    return Token{type, offset, len};
+    return Token(type, offset, len);
 }
 
 std::vector<Token> Lexer::TokenizeAll() {
@@ -245,7 +253,8 @@ std::vector<Token> Lexer::TokenizeAll() {
         Token tok = NextToken();
         if (tok.type == TokenType::kError) {
             res.clear();
-            std::cerr << "Token fignya\n";
+            auto [line, col] = buffer_.GetLocation(tok.offset);
+            std::cerr << "Token fignya\n" << line << ":" << col << ": " << std::string_view(buffer_.data() + tok.offset, tok.len) << '\n';;
             return res;
         }
         res.push_back(tok);

@@ -1,12 +1,13 @@
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <vector>
 #include <string>
 
 namespace paracl::lexer {
 
-enum class TokenType : uint32_t {
+enum class TokenType : uint32_t { //NOLINT чётатам хочется 4 байта
     kKeyWordIf = 0,
     kKeyWordElse,
     kKeyWordWhile,
@@ -67,7 +68,7 @@ public:
             return {1, 1};
         }
 
-        auto iterator = std::upper_bound(newLines_.begin(), newLines_.end(), offset);
+        auto iterator = std::ranges::upper_bound(newLines_.begin(), newLines_.end(), offset);
         std::size_t lineIdx = std::distance(newLines_.begin(), iterator);
         
         return {lineIdx, offset - newLines_[lineIdx - 1] + 1};
@@ -93,8 +94,8 @@ private:
 
 class Lexer {
  public:
-    static int64_t TokenToNum(Token token, const SourceBuffer& buffer);
-    static std::string TokenToStr(Token token, const SourceBuffer& buffer);
+    int64_t TokenToNum(Token token) const;
+    std::string TokenToStr(Token token) const;
  
  Lexer(const SourceBuffer& source)
     : buffer_{source} {}
