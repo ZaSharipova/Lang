@@ -93,9 +93,10 @@ private:
 };
 
 class Lexer {
- public:
+public:
     int64_t TokenToNum(Token token) const;
     std::string TokenToStr(Token token) const;
+    void PrintError(Token token) const;
  
  Lexer(const SourceBuffer& source)
     : buffer_{source} {}

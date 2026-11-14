@@ -184,8 +184,15 @@ Token Lexer::LexNumber() {
 
 Token Lexer::LexPunctuation() {
     uint32_t offset = cursor_;
-    uint32_t len = 1;
     TokenType type = TokenType::kError;
+
+    auto doesMatch = [this](char expected, TokenType matchType, TokenType defaultType) {
+        if (buffer_[cursor_] == expected) {
+            cursor_++;
+            return matchType;
+        }
+        return defaultType;  
+    };
 
     char character = buffer_[cursor_++];
     switch (character) {
@@ -201,48 +208,15 @@ Token Lexer::LexPunctuation() {
         case '}': type = TokenType::kRBrace; break;
         case ';': type = TokenType::kSemicolon; break;
 
-        case '=': 
-            if (buffer_[cursor_] == '=') {
-                type = TokenType::kEqualEqual;
-                len = 2;
-                cursor_++;
-                break;
-            }
-            type = TokenType::kEqual;
-            break;
-        
-        case '!': 
-            if (buffer_[cursor_] == '=') {
-                type = TokenType::kNotEqual;
-                len = 2;
-                cursor_++;
-                break;
-            }
-            type = TokenType::kError;
-            break;
-
-        case '<':
-            if (buffer_[cursor_] == '=') {
-                type = TokenType::kLessEq;
-                len = 2;
-                cursor_++;
-                break;
-            }
-            type = TokenType::kLess;
-            break;
-
-        case '>':
-            if (buffer_[cursor_] == '=') {
-                type = TokenType::kGreatEq;
-                len = 2;
-                cursor_++;
-                break;
-            }
-            type = TokenType::kGreat;
-            break;
+        case '=': type = doesMatch('=', TokenType::kEqualEqual, TokenType::kEqual); break;
+        case '!': type = doesMatch('=', TokenType::kNotEqual, TokenType::kError); break;
+        case '<': type = doesMatch('=', TokenType::kLess, TokenType::kLessEq); break;        
+        case '>': type = doesMatch('=', TokenType::kGreat, TokenType::kGreatEq); break;        
 
         default: break;
     }
+
+    auto len = static_cast<uint32_t>(cursor_ - offset);
 
     return Token(type, offset, len);
 }
