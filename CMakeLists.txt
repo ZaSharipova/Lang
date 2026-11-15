@@ -20,3 +20,13 @@ set(INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tests)
 
 include_directories(${INCLUDE_DIR})
+
+set (FRONT_SRC
+    ${SRC_DIR}/lexer.cpp
+    ${SRC_DIR}/parser.cpp
+)
+
+add_library(front ${FRONT_SRC})
+
+add_executable(front_with_dump ${SRC_DIR}/main.cpp ${SRC_DIR}/dump_tree.cpp)
+target_link_libraries(front_with_dump PRIVATE front)
