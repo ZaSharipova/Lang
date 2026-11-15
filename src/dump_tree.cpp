@@ -8,7 +8,7 @@
 #include <string>
 #include <string_view>
 
-#include "../include/node.hpp"
+#include "node.hpp"
 
 namespace paracl {
 
