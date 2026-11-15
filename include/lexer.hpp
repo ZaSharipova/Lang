@@ -42,6 +42,7 @@ enum class TokenType : uint32_t { //NOLINT чётатам хочется 4 ба�
     kRBrace,
 
     kSemicolon,
+    kComma,
 };
 
 struct Token {

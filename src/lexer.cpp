@@ -227,8 +227,7 @@ std::vector<Token> Lexer::TokenizeAll() {
         Token tok = NextToken();
         if (tok.type == TokenType::kError) {
             res.clear();
-            auto [line, col] = buffer_.GetLocation(tok.offset);
-            std::cerr << "Token fignya\n" << line << ":" << col << ": " << std::string_view(buffer_.data() + tok.offset, tok.len) << '\n';;
+            PrintError(tok);
             return res;
         }
         res.push_back(tok);
@@ -238,6 +237,40 @@ std::vector<Token> Lexer::TokenizeAll() {
     }
 
     return res;
+}
+
+void Lexer::PrintError(Token token) const {
+    auto [line, col] = buffer_.GetLocation(token.offset);
+    
+    const char* bufStart = buffer_.data();
+    const char* bufEnd = bufStart + buffer_.size();
+    
+    const char* lineStart = bufStart + token.offset - (col - 1);    
+
+    const char* lineEnd = lineStart;
+    while (lineEnd < bufEnd && *lineEnd != '\n' && *lineEnd != '\r') {
+        ++lineEnd;
+    }
+    
+    std::string_view lineStr(lineStart, lineEnd - lineStart);
+    std::string_view badToken(bufStart + token.offset, token.len);
+
+    std::cerr << "Syntax error at " << line << ":" << col << " bad token '" << badToken << "'\n";
+    
+    std::string linePrefix = " " + std::to_string(line) + " | ";
+    std::cerr << linePrefix << lineStr << "\n";
+    
+    std::cerr << std::string(linePrefix.size() - 2, ' ') << "| ";
+    
+    for (std::size_t i = 0; i < col - 1; ++i) {
+        std::cerr << (lineStr[i] == '\t' ? '\t' : ' ');
+    }
+    
+    std::cerr << '^';
+    if (token.len > 1) {
+        std::cerr << std::string(token.len - 1, '~');
+    }
+    std::cerr << "\n";
 }
 
 } // namespace paracl::lexer
