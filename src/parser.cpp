@@ -1,12 +1,12 @@
-#include "../include/parser.hpp"
+#include "parser.hpp"
 
 #include <cassert>
 #include <iostream>
 #include <memory>
 #include <vector>
 
-#include "../include/lexer.hpp"
-#include "../include/node.hpp"
+#include "lexer.hpp"
+#include "node.hpp"
 
 /* G          ::= FUNCTION_D+
    FUNCTION_D ::= V "(" [ E {"," E}* ] ")" "{" OP* "}"
@@ -50,13 +50,13 @@ NodePtr Parser::Parse() {
 NodePtr Parser::GetFunctionDeclare() {
     const lexer::Token name_token = GetToken();
     if (!IsThatTokenType(lexer::TokenType::kIdentifier)) {
-        std::cerr << "Error while parsing function declaration: there is no function name\n";
+        ReportError("Error while parsing function declaration: there is no function name");
         return nullptr;
     }
     std::string name = lexer_->TokenToStr(name_token);
 
     if (!IsThatTokenType(lexer::TokenType::kLParen)) {
-        std::cerr << "Error while parsing function declaration: there's no '('\n";
+        ReportError("Error while parsing function declaration: there's no '('");
         return nullptr;
     }
 
@@ -65,7 +65,7 @@ NodePtr Parser::GetFunctionDeclare() {
         do {
             const lexer::Token arg_token = GetToken();
             if (!IsThatTokenType(lexer::TokenType::kIdentifier)) {
-                std::cerr << "Error while parsing function declaration: parameter name expected\n";
+                ReportError("Error while parsing function declaration: parameter name expected");
                 return nullptr;
             }
 
@@ -74,7 +74,7 @@ NodePtr Parser::GetFunctionDeclare() {
     }
 
     if (!IsThatTokenType(lexer::TokenType::kRParen)) {
-        std::cerr << "Error while parsing function declaration: there's no ')'\n";
+        ReportError("Error while parsing function declaration: there's no ')'");
         return nullptr;
     }
 
@@ -86,16 +86,16 @@ NodePtr Parser::GetFunctionDeclare() {
     return std::make_unique<FunctionNode>(std::move(name), std::move(args), std::move(body));
 }
 
-NodePtr Parser::GetFunctionCall(bool hasToBeSemicolon) {  // NOLINT(misc-no-recursion)
+NodePtr Parser::GetFunctionCall(bool hasToBeSemicolon) { // NOLINT(misc-no-recursion)
     const lexer::Token name_token = GetToken();
     if (!IsThatTokenType(lexer::TokenType::kIdentifier)) {
-        std::cerr << "Error while parsing function call: there is no function name\n";
+        ReportError("Error while parsing function call: there is no function name");
         return nullptr;
     }
     std::string name = lexer_->TokenToStr(name_token);
 
     if (!IsThatTokenType(lexer::TokenType::kLParen)) {
-        std::cerr << "Error while parsing function call: there's no '('\n";
+        ReportError("Error while parsing function call: there's no '('");
         return nullptr;
     }
 
@@ -104,7 +104,7 @@ NodePtr Parser::GetFunctionCall(bool hasToBeSemicolon) {  // NOLINT(misc-no-recu
         do {
             NodePtr arg = GetExpression();
             if (!arg) {
-                std::cerr << "Error while parsing function call: parameter expression expected\n";
+                ReportError("Error while parsing function call: parameter expression expected");
                 return nullptr;
             }
 
@@ -113,12 +113,12 @@ NodePtr Parser::GetFunctionCall(bool hasToBeSemicolon) {  // NOLINT(misc-no-recu
     }
 
     if (!IsThatTokenType(lexer::TokenType::kRParen)) {
-        std::cerr << "Error while parsing function call: there's no ')'\n";
+        ReportError("Error while parsing function call: there's no ')'");
         return nullptr;
     }
 
     if (hasToBeSemicolon && !IsThatTokenType(lexer::TokenType::kSemicolon)) {
-        std::cerr << "Error: there is no ';'\n";
+        ReportError("Error: there is no ';'");
         return nullptr;
     }
 
@@ -184,13 +184,13 @@ NodePtr Parser::GetElse() { // NOLINT(misc-no-recursion)
 
 NodePtr Parser::GetCondition() {
     if (!IsThatTokenType(lexer::TokenType::kLParen)) {
-        std::cerr << "Error while parsing if, as there's no '(' in condition\n";
+        ReportError("Error while parsing if, as there's no '(' in condition");
         return nullptr;
     }
 
     NodePtr left = GetExpression();
     if (!left) {
-        std::cerr << "Error while parsing if, as there's no correct condition\n";
+        ReportError("Error while parsing if, as there's no correct condition");
         return nullptr;
     }
 
@@ -199,7 +199,7 @@ NodePtr Parser::GetCondition() {
         IncreaseTokensPos();
         NodePtr right = GetExpression();
         if (!right) {
-            std::cerr << "Error while parsing if, as there's no correct condition after comparison sign\n";
+            ReportError("Error while parsing if, as there's no correct condition after comparison sign");
             return nullptr;
         }
 
@@ -207,7 +207,7 @@ NodePtr Parser::GetCondition() {
     }
 
     if (!IsThatTokenType(lexer::TokenType::kRParen)) {
-        std::cerr << "Error while parsing if, as there's no ')' in condition\n";
+        ReportError("Error while parsing if, as there's no ')' in condition");
         return nullptr;
     }
 
@@ -216,7 +216,7 @@ NodePtr Parser::GetCondition() {
 
 NodePtr Parser::GetBody() { // NOLINT(misc-no-recursion)
     if (!IsThatTokenType(lexer::TokenType::kLBrace)) {
-        std::cerr << "Error while parsing if, as there's no '(' in condition\n";
+        ReportError("Error while parsing if, as there's no '(' in condition");
         return nullptr;
     }
 
@@ -224,7 +224,7 @@ NodePtr Parser::GetBody() { // NOLINT(misc-no-recursion)
     while (!IsThatTokenType(lexer::TokenType::kRBrace)) {
         NodePtr body = GetOp();
         if (!body) {
-            // std::cerr << "Error while parsing, body of if or while is incorrect\n";
+            // ReportError("Error while parsing, body of if or while is incorrect");
             return nullptr;
         }
 
@@ -246,7 +246,7 @@ NodePtr Parser::GetExpression() { // NOLINT(misc-no-recursion)
         IncreaseTokensPos();
         NodePtr right = GetTerm();
         if (!right) {
-            std::cerr << "There is no right part in arithmetical expression\n"; // TODO like there's a mistake in tokens_.pos_
+            ReportError("There is no right part in arithmetical expression"); // TODO like there's a mistake in tokens_.pos_
             return nullptr;
         }
 
@@ -269,7 +269,7 @@ NodePtr Parser::GetTerm() { // NOLINT(misc-no-recursion)
         IncreaseTokensPos();
         NodePtr right = GetPrimary();
         if (!right) {
-            std::cerr << "There is no right part in arithmetical expression\n"; // TODO like there's a mistake in tokens_.pos_
+            ReportError("There is no right part in arithmetical expression"); // TODO like there's a mistake in tokens_.pos_
             return nullptr;
         }
 
@@ -284,7 +284,7 @@ NodePtr Parser::GetPrimary() { // NOLINT(misc-no-recursion)
     if (IsThatTokenType(lexer::TokenType::kLParen)) {
         NodePtr expr = GetExpression();
         if (!expr) {
-            std::cerr << "Error while getting primary expression: there is no appropriate expression\n";
+            ReportError("Error while getting primary expression: there is no appropriate expression");
             return nullptr;
         }
 
@@ -292,7 +292,7 @@ NodePtr Parser::GetPrimary() { // NOLINT(misc-no-recursion)
             return expr;
         }
 
-        std::cerr << "Error while parsing expr in parens, there is no ')'\n";
+        ReportError("Error while parsing expr in parens, there is no ')'");
         return nullptr;
     }
 
@@ -338,7 +338,7 @@ NodePtr Parser::GetReturn() {
     }
 
     if (!IsThatTokenType(lexer::TokenType::kSemicolon)) {
-        std::cerr << "Error: there is no ';'\n";
+        ReportError("Error: there is no ';'");
         return nullptr;
     }
 
@@ -351,23 +351,23 @@ NodePtr Parser::GetPrint() {
     }
 
     if (!IsThatTokenType(lexer::TokenType::kLParen)) {
-        std::cerr << "Error while parsing print: there is no '('\n"; // TODO
+        ReportError("Error while parsing print: there is no '('");
         return nullptr;
     }
 
     NodePtr expr = GetExpression();
     if (!expr) {
-        std::cerr << "Error while parsing expression in print\n";
+        ReportError("Error while parsing expression in print");
         return nullptr;
     }
 
     if (!IsThatTokenType(lexer::TokenType::kRParen)) {
-        std::cerr << "Error while parsing print: there is no ')'\n";
+        ReportError("Error while parsing print: there is no ')'");
         return nullptr;
     }
 
     if (!IsThatTokenType(lexer::TokenType::kSemicolon)) {
-        std::cerr << "Error: there is no ';'\n";
+        ReportError("Error: there is no ';'");
         return nullptr;
     }
 
@@ -399,7 +399,7 @@ NodePtr Parser::GetOp() { // NOLINT(misc-no-recursion)
         //     return GetScan();
 
     default:
-        std::cerr << "Error while parsing operation: unexpected token\n";
+        ReportError("Error while parsing operation: unexpected token");
         return nullptr;
     }
 }
@@ -411,7 +411,7 @@ NodePtr Parser::GetAssign() {
     }
 
     if (!IsThatTokenType(lexer::TokenType::kEqual)) {
-        std::cerr << "Error while parsing assignment: there is no '='\n";
+        ReportError("Error while parsing assignment: there is no '='");
         return nullptr;
     }
 
@@ -421,7 +421,7 @@ NodePtr Parser::GetAssign() {
     }
 
     if (!IsThatTokenType(lexer::TokenType::kSemicolon)) {
-        std::cerr << "Error while parsing assignment: there is no ';'\n";
+        ReportError("Error while parsing assignment: there is no ';'");
         return nullptr;
     }
 
@@ -462,6 +462,11 @@ bool Parser::IsThatTokenType(lexer::TokenType type) {
 void Parser::IncreaseTokensPos() {
     assert(pos_ < tokens_.size());
     pos_++;
+}
+
+void Parser::ReportError(std::string_view error_message) const {
+    std::cout << error_message << '\n';
+    lexer_->PrintError(GetToken());
 }
 
 OpType Parser::ToOpType(lexer::Token token) {

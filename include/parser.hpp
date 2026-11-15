@@ -68,6 +68,7 @@ private:
     lexer::Token GetNextToken();
     bool IsThatTokenType(lexer::TokenType type);
     void IncreaseTokensPos();
+    void ReportError(std::string_view error_message) const;
 
     const lexer::Lexer* lexer_ = nullptr;
     std::vector<lexer::Token> tokens_;
