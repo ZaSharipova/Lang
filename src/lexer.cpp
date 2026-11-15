@@ -211,8 +211,8 @@ Token Lexer::LexPunctuation() {
 
         case '=': type = doesMatch('=', TokenType::kEqualEqual, TokenType::kEqual); break;
         case '!': type = doesMatch('=', TokenType::kNotEqual, TokenType::kError); break;
-        case '<': type = doesMatch('=', TokenType::kLess, TokenType::kLessEq); break;        
-        case '>': type = doesMatch('=', TokenType::kGreat, TokenType::kGreatEq); break;        
+        case '<': type = doesMatch('=', TokenType::kLessEq, TokenType::kLess); break;        
+        case '>': type = doesMatch('=', TokenType::kGreatEq, TokenType::kGreat); break;        
 
         default: break;
     }
