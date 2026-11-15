@@ -1,0 +1,11 @@
+main() {
+    print(fib(6));
+}
+
+fib(a) {
+    if (a == 0) {
+        return 1;
+    }
+
+    return a * fib(a - 1);
+}

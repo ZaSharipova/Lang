@@ -11,23 +11,23 @@
 /* G          ::= FUNCTION_D+
    FUNCTION_D ::= V "(" [ E {"," E}* ] ")" "{" OP* "}"
 
-   OP         ::= RETURN | PRINTF | SCANF | WHILE | IF | CALL
+   OP         ::= RETURN | SCANF | PRINTF | WHILE | IF | CALL
 
    RETURN     ::= "return" E ";"
-   PRINTF     ::= ("write" | "write_char") "(" (V | N) ")" ";"
+   SCANF      ::= "read" "(" V ")" ";"
+   PRINTF     ::= "print" "(" (V | N) ")" ";"
    CALL       ::= V "(" E [ E {"," E}* ] ")" ";"
-   SCANF      ::= "read" "(" S ")" ";" пока скип
    WHILE      ::= "while" "(" CONDITION ")" BODY +
    IF         ::= "if" "(" CONDITION ")" BODY [ "else" BODY ] +
    CONDITION  ::= E [ ("<=" | "<" | ">=" | ">" | "==" | "!=") E ]
    BODY       ::= "{" OP* "}"
 
    E          ::= T ([+-] T)* +
-   T          ::= P ([*:/] P)* +
-   P          ::= '(' E ')' | CALL | Identifier | IntLiteral
+   T          ::= P ([*:/%] P)* +
+   P          ::= '(' E ')' | CALL | V | N
 
-   V          ::= Variable +
-   N          ::= Number +
+   V (Identifier) ::= Variable
+   N (IntLiteral) ::= Number
 */
 
 namespace paracl::parser {
@@ -36,7 +36,7 @@ NodePtr Parser::Parse() {
     auto root = std::make_unique<ProgramNode>();
 
     while (GetToken().type != lexer::TokenType::kEof) {
-        NodePtr function = GetFunctionDeclare();
+        std::unique_ptr<FunctionNode> function = GetFunctionDeclare();
         if (!function) {
             return nullptr;
         }
@@ -47,7 +47,7 @@ NodePtr Parser::Parse() {
     return root;
 }
 
-NodePtr Parser::GetFunctionDeclare() {
+std::unique_ptr<FunctionNode> Parser::GetFunctionDeclare() {
     const lexer::Token name_token = GetToken();
     if (!IsThatTokenType(lexer::TokenType::kIdentifier)) {
         ReportError("Error while parsing function declaration: there is no function name");
@@ -264,7 +264,7 @@ NodePtr Parser::GetTerm() { // NOLINT(misc-no-recursion)
     }
 
     lexer::Token op_token = GetToken();
-    while (op_token.type == lexer::TokenType::kStar || op_token.type == lexer::TokenType::kSlash) {
+    while (op_token.type == lexer::TokenType::kStar || op_token.type == lexer::TokenType::kSlash || op_token.type == lexer::TokenType::kPercent) {
         const OpType op_node_type = ToOpType(op_token);
         IncreaseTokensPos();
         NodePtr right = GetPrimary();
@@ -300,7 +300,7 @@ NodePtr Parser::GetPrimary() { // NOLINT(misc-no-recursion)
         return GetFunctionCall(false);
     }
 
-    NodePtr variable = GetIdentifier();
+    auto variable = GetIdentifier();
     if (variable) {
         return variable;
     }
@@ -309,7 +309,7 @@ NodePtr Parser::GetPrimary() { // NOLINT(misc-no-recursion)
     return intliteral;
 }
 
-NodePtr Parser::GetIdentifier() {
+std::unique_ptr<VariableNode> Parser::GetIdentifier() {
     const lexer::Token token = GetToken();
     if (IsThatTokenType(lexer::TokenType::kIdentifier)) {
         return std::make_unique<VariableNode>(lexer_->TokenToStr(token));
@@ -343,6 +343,35 @@ NodePtr Parser::GetReturn() {
     }
 
     return std::make_unique<ReturnNode>(std::move(expr));
+}
+
+NodePtr Parser::GetScan() {
+    if (!IsThatTokenType(lexer::TokenType::kKeyWordScan)) {
+        return nullptr;
+    }
+
+    if (!IsThatTokenType(lexer::TokenType::kLParen)) {
+        ReportError("Error while parsing scan: there is no '('");
+        return nullptr;
+    }
+
+    auto variable = GetIdentifier();
+    if (!variable) {
+        ReportError("Error while parsing expression in scan");
+        return nullptr;
+    }
+
+    if (!IsThatTokenType(lexer::TokenType::kRParen)) {
+        ReportError("Error while parsing scan: there is no ')'");
+        return nullptr;
+    }
+
+    if (!IsThatTokenType(lexer::TokenType::kSemicolon)) {
+        ReportError("Error while parsing scan: there is no ';'");
+        return nullptr;
+    }
+
+    return std::make_unique<ScanNode>(std::move(variable));
 }
 
 NodePtr Parser::GetPrint() {
@@ -379,6 +408,9 @@ NodePtr Parser::GetOp() { // NOLINT(misc-no-recursion)
     case lexer::TokenType::kKeyWordReturn:
         return GetReturn();
 
+    case lexer::TokenType::kKeyWordScan:
+        return GetScan();
+
     case lexer::TokenType::kKeyWordPrint:
         return GetPrint();
 
@@ -394,9 +426,6 @@ NodePtr Parser::GetOp() { // NOLINT(misc-no-recursion)
         }
 
         return GetFunctionCall(true);
-
-        // case lexer::TokenType::kKeyWordScan: // TODO пока скип
-        //     return GetScan();
 
     default:
         ReportError("Error while parsing operation: unexpected token");
@@ -483,9 +512,9 @@ OpType Parser::ToOpType(lexer::Token token) {
         return OpType::kMod;
 
     case lexer::TokenType::kEqualEqual:
-        return OpType::kEq;
+        return OpType::kEQ;
     case lexer::TokenType::kNotEqual:
-        return OpType::kNe;
+        return OpType::kNE;
     case lexer::TokenType::kLess:
         return OpType::kL;
     case lexer::TokenType::kLessEq:

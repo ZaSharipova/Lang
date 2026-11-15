@@ -19,18 +19,19 @@ set(SRC_DIR ${CMAKE_CURRENT_SOURCE_DIR}/src)
 set(INCLUDE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/include)
 set(TEST_DIR ${CMAKE_CURRENT_SOURCE_DIR}/tests)
 
-include_directories(${INCLUDE_DIR})
+set(FRONT_DIR ${SRC_DIR}/front_end)
+set(INTERPRETER_DIR ${SRC_DIR}/interpreter)
 
-set (FRONT_SRC
-    ${SRC_DIR}/lexer.cpp
-    ${SRC_DIR}/parser.cpp
-)
-
-add_library(front ${FRONT_SRC})
-target_include_directories(front PUBLIC ${INCLUDE_DIR})
-
-add_executable(front_with_dump ${SRC_DIR}/main.cpp ${SRC_DIR}/dump_tree.cpp)
-target_link_libraries(front_with_dump PRIVATE front)
-
+include_directories(${INCLUDE_DIR} ${INCLUDE_DIR}/front_end ${INCLUDE_DIR}/interpreter)
 
 add_subdirectory(tests)
+
+add_library(front ${FRONT_DIR}/lexer.cpp ${FRONT_DIR}/parser.cpp)
+add_library(dump ${FRONT_DIR}/dump_tree.cpp)
+add_library(interpreter ${INTERPRETER_DIR}/interpreter.cpp)
+
+# add_executable(front_with_dump ${SRC_DIR}/main.cpp)
+# target_link_libraries(front_with_dump PRIVATE front dump interpreter)
+
+add_executable(interp ${SRC_DIR}/main.cpp)
+target_link_libraries(interp PRIVATE front interpreter dump)

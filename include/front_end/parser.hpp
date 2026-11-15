@@ -11,23 +11,23 @@
 /* G          ::= FUNCTION_D+
    FUNCTION_D ::= V "(" [ E {"," E}* ] ")" "{" OP* "}"
 
-   OP         ::= RETURN | PRINTF | SCANF | WHILE | IF | CALL;
+   OP         ::= RETURN | SCANF | PRINTF | WHILE | IF | CALL
 
    RETURN     ::= "return" E ";"
-   PRINTF     ::= ("write" | "write_char") "(" (V | N) ")" ";"
+   SCANF      ::= "read" "(" V ")" ";"
+   PRINTF     ::= "print" "(" (V | N) ")" ";"
    CALL       ::= V "(" E [ E {"," E}* ] ")" ";"
-   SCANF      ::= "read" "(" S ")" ";" пока скип
    WHILE      ::= "while" "(" CONDITION ")" BODY +
    IF         ::= "if" "(" CONDITION ")" BODY [ "else" BODY ] +
    CONDITION  ::= E [ ("<=" | "<" | ">=" | ">" | "==" | "!=") E ]
    BODY       ::= "{" OP* "}"
 
    E          ::= T ([+-] T)* +
-   T          ::= P ([*:/] P)* +
-   P          ::= IntLiteral | Identifier | '(' E ')' +
+   T          ::= P ([*:/%] P)* +
+   P          ::= '(' E ')' | CALL | V | N
 
-   V          ::= Variable +
-   N          ::= Number +
+   V (Identifier) ::= Variable
+   N (IntLiteral) ::= Number
 */
 
 namespace paracl::parser {
@@ -43,7 +43,7 @@ public:
     NodePtr Parse();
 
 private:
-    NodePtr GetFunctionDeclare();
+    std::unique_ptr<FunctionNode> GetFunctionDeclare();
     NodePtr GetFunctionCall(bool hasToBeSemicolon);
     NodePtr GetWhile();
     NodePtr GetIf();
@@ -53,9 +53,10 @@ private:
     NodePtr GetExpression();
     NodePtr GetTerm();
     NodePtr GetPrimary();
-    NodePtr GetIdentifier();
+    std::unique_ptr<VariableNode> GetIdentifier();
     NodePtr GetIntLiteral();
     NodePtr GetReturn();
+    NodePtr GetScan();
     NodePtr GetPrint();
     NodePtr GetOp();
     NodePtr GetAssign();

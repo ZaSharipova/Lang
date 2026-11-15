@@ -12,6 +12,7 @@ class ValueNode;
 class VariableNode;
 class OpNode;
 class AssignNode;
+class ScanNode;
 class PrintNode;
 class ReturnNode;
 class FunctionNode;
@@ -21,22 +22,29 @@ class ScopeNode;
 class IfNode;
 class WhileNode;
 
+enum class Status : uint8_t {
+    kOk,
+    kReturn,
+    kError,
+};
+
 class IVisitor {
 public:
     virtual ~IVisitor() = default;
 
-    virtual void Visit(const ValueNode& node) = 0;
-    virtual void Visit(const VariableNode& node) = 0;
-    virtual void Visit(const OpNode& node) = 0;
-    virtual void Visit(const AssignNode& node) = 0;
-    virtual void Visit(const PrintNode& node) = 0;
-    virtual void Visit(const ReturnNode& node) = 0;
-    virtual void Visit(const FunctionNode& node) = 0;
-    virtual void Visit(const CallNode& node) = 0;
-    virtual void Visit(const ProgramNode& node) = 0;
-    virtual void Visit(const ScopeNode& node) = 0;
-    virtual void Visit(const IfNode& node) = 0;
-    virtual void Visit(const WhileNode& node) = 0;
+    virtual Status Visit(const ValueNode& node) = 0;
+    virtual Status Visit(const VariableNode& node) = 0;
+    virtual Status Visit(const OpNode& node) = 0;
+    virtual Status Visit(const AssignNode& node) = 0;
+    virtual Status Visit(const ScanNode& node) = 0;
+    virtual Status Visit(const PrintNode& node) = 0;
+    virtual Status Visit(const ReturnNode& node) = 0;
+    virtual Status Visit(const FunctionNode& node) = 0;
+    virtual Status Visit(const CallNode& node) = 0;
+    virtual Status Visit(const ProgramNode& node) = 0;
+    virtual Status Visit(const ScopeNode& node) = 0;
+    virtual Status Visit(const IfNode& node) = 0;
+    virtual Status Visit(const WhileNode& node) = 0;
 };
 
 class INode {
@@ -46,14 +54,14 @@ public:
     INode(const INode&) = delete;
     INode& operator=(const INode&) = delete;
 
-    virtual void Accept(IVisitor& visitor) const = 0;
+    virtual Status Accept(IVisitor& visitor) const = 0;
 };
 
 template <typename Derived>
 class NodeBase : public INode {
 public:
-    void Accept(IVisitor& visitor) const override {
-        visitor.Visit(static_cast<const Derived&>(*this));
+    Status Accept(IVisitor& visitor) const override {
+        return visitor.Visit(static_cast<const Derived&>(*this));
     }
 
 private:
@@ -94,8 +102,8 @@ enum class OpType : std::uint8_t {
     kG,
     kLE,
     kGE,
-    kEq,
-    kNe,
+    kEQ,
+    kNE,
 };
 
 class OpNode : public NodeBase<OpNode> {
@@ -129,6 +137,17 @@ private:
     NodePtr expr_;
 };
 
+class ScanNode : public NodeBase<ScanNode> {
+public:
+    explicit ScanNode(std::unique_ptr<VariableNode> variable_node)
+        : variable_(std::move(variable_node)) { }
+
+    VariableNode* GetVariable() const { return variable_.get(); }
+
+private:
+    std::unique_ptr<VariableNode> variable_;
+};
+
 class PrintNode : public NodeBase<PrintNode> {
 public:
     explicit PrintNode(NodePtr expr)
@@ -140,7 +159,7 @@ private:
     NodePtr expr_;
 };
 
-class ReturnNode : public NodeBase<ReturnNode> { // TODO return and print have to extend the same class
+class ReturnNode : public NodeBase<ReturnNode> {
 public:
     explicit ReturnNode(NodePtr expr)
         : expr_(std::move(expr)) { }
@@ -160,6 +179,7 @@ public:
 
     const std::string& GetName() const { return name_; }
     const std::vector<std::string>& GetParams() const { return params_; }
+    std::size_t GetParamsSize() const { return params_.size(); }
     INode* GetBody() const { return body_.get(); }
 
 private:
@@ -176,6 +196,7 @@ public:
 
     const std::string& GetName() const { return name_; }
     const std::vector<NodePtr>& GetArgs() const { return args_; }
+    std::size_t GetArgsSize() const { return args_.size(); }
 
 private:
     std::string name_;
@@ -184,11 +205,11 @@ private:
 
 class ProgramNode : public NodeBase<ProgramNode> {
 public:
-    void AddFunction(NodePtr function) { functions_.push_back(std::move(function)); }
-    const std::vector<NodePtr>& GetFunctions() const { return functions_; }
+    void AddFunction(std::unique_ptr<FunctionNode> function) { functions_.push_back(std::move(function)); }
+    const std::vector<std::unique_ptr<FunctionNode>>& GetFunctions() const { return functions_; }
 
 private:
-    std::vector<NodePtr> functions_;
+    std::vector<std::unique_ptr<FunctionNode>> functions_;
 };
 
 class ScopeNode : public NodeBase<ScopeNode> {
@@ -209,6 +230,7 @@ public:
 
     INode* GetCondition() const { return cond_.get(); }
     INode* GetBody() const { return body_.get(); }
+    bool ElseExists() const { return else_body_.get() != nullptr; }
     INode* GetElse() const { return else_body_.get(); }
 
 private:
