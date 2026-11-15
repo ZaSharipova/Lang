@@ -133,7 +133,7 @@ Token Lexer::NextToken() {
         return Token(TokenType::kEof, static_cast<uint32_t>(cursor_), 0);
     }
 
-    if (IsAlpha(buffer_[cursor_]) != 0) {
+    if (static_cast<int>(IsAlpha(buffer_[cursor_])) != 0) {
         return LexIdentifierOrKeyword();
     }
 
@@ -207,6 +207,7 @@ Token Lexer::LexPunctuation() {
         case '{': type = TokenType::kLBrace; break;
         case '}': type = TokenType::kRBrace; break;
         case ';': type = TokenType::kSemicolon; break;
+        case ',': type = TokenType::kComma; break;
 
         case '=': type = doesMatch('=', TokenType::kEqualEqual, TokenType::kEqual); break;
         case '!': type = doesMatch('=', TokenType::kNotEqual, TokenType::kError); break;
