@@ -1,5 +1,5 @@
 main() {
-    print(fib(6));
+    print(fib(10));
 }
 
 fib(a) {
@@ -7,5 +7,11 @@ fib(a) {
         return 1;
     }
 
-    return a * fib(a - 1);
+    if (a == 1) {
+        return 1;
+    }
+
+    return fib(a - 1) + fib(a - 2);
 }
+
+// 1 1 2 3 5 8 13 21 34

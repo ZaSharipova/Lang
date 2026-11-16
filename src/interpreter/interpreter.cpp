@@ -30,7 +30,7 @@ Status Interpreter::Visit(const OpNode& node) {
     }
     BaseValue rhs = result_;
 
-    if (node.GetType() == OpType::kDiv && rhs == 0) {
+    if ((node.GetType() == OpType::kDiv || node.GetType() == OpType::kMod) && rhs == 0) {
         throw std::runtime_error("division by zero");
     }
 
@@ -67,7 +67,7 @@ Status Interpreter::Visit(const OpNode& node) {
         result_ = lhs == rhs;
         break;
     case OpType::kNE:
-        result_ = lhs + rhs;
+        result_ = lhs != rhs;
         break;
 
     default:
@@ -87,7 +87,6 @@ Status Interpreter::Visit(const AssignNode& node) {
 }
 
 Status Interpreter::Visit(const ScanNode& node) {
-    node.GetVariable()->Accept(*this);
     BaseValue input { };
     std::cin >> input;
 
@@ -96,7 +95,10 @@ Status Interpreter::Visit(const ScanNode& node) {
 }
 
 Status Interpreter::Visit(const PrintNode& node) {
-    node.GetExpr()->Accept(*this);
+    if (Status res = node.GetExpr()->Accept(*this); res != Status::kOk) {
+        return res;
+    }
+
     std::cout << result_;
     return Status::kOk;
 }

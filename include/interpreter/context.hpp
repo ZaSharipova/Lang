@@ -3,9 +3,11 @@
 #include <string_view>
 #include <vector>
 
+#include "config.hpp"
+
 namespace paracl {
 
-using BaseValue = std::uint64_t;
+using BaseValue = std::int64_t;
 
 class Context {
 public:
@@ -65,6 +67,7 @@ public:
         : env_(env) { env_.PushScope(); }
     ~ScopeGuard() { env_.PopScope(); }
     ScopeGuard(const ScopeGuard&) = delete;
+    ScopeGuard(ScopeGuard&&) = delete;
     ScopeGuard& operator=(const ScopeGuard&) = delete;
 
 private:
@@ -85,6 +88,7 @@ public:
         env_.SetFrameBase(oldBase_);
     }
     CallFrameGuard(const CallFrameGuard&) = delete;
+    CallFrameGuard(CallFrameGuard&&) = delete;
     CallFrameGuard& operator=(const CallFrameGuard&) = delete;
 
 private:
@@ -92,4 +96,4 @@ private:
     std::size_t oldBase_ = 0;
 };
 
-}
+} // namespace paracl

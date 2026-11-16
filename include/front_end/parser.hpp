@@ -43,8 +43,13 @@ public:
     NodePtr Parse();
 
 private:
+    enum class FunctionCallModes {
+        kWithSemicolon,
+        kWithoutSemicolon,
+    };
+
     std::unique_ptr<FunctionNode> GetFunctionDeclare();
-    NodePtr GetFunctionCall(bool hasToBeSemicolon);
+    NodePtr GetFunctionCall(FunctionCallModes mode);
     NodePtr GetWhile();
     NodePtr GetIf();
     NodePtr GetElse();

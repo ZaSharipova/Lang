@@ -86,7 +86,7 @@ std::unique_ptr<FunctionNode> Parser::GetFunctionDeclare() {
     return std::make_unique<FunctionNode>(std::move(name), std::move(args), std::move(body));
 }
 
-NodePtr Parser::GetFunctionCall(bool hasToBeSemicolon) { // NOLINT(misc-no-recursion)
+NodePtr Parser::GetFunctionCall(FunctionCallModes mode) { // NOLINT(misc-no-recursion)
     const lexer::Token name_token = GetToken();
     if (!IsThatTokenType(lexer::TokenType::kIdentifier)) {
         ReportError("Error while parsing function call: there is no function name");
@@ -117,7 +117,7 @@ NodePtr Parser::GetFunctionCall(bool hasToBeSemicolon) { // NOLINT(misc-no-recur
         return nullptr;
     }
 
-    if (hasToBeSemicolon && !IsThatTokenType(lexer::TokenType::kSemicolon)) {
+    if (mode == FunctionCallModes::kWithSemicolon && !IsThatTokenType(lexer::TokenType::kSemicolon)) {
         ReportError("Error: there is no ';'");
         return nullptr;
     }
@@ -297,7 +297,7 @@ NodePtr Parser::GetPrimary() { // NOLINT(misc-no-recursion)
     }
 
     if (GetToken().type == lexer::TokenType::kIdentifier && SeeNextToken().type == lexer::TokenType::kLParen) {
-        return GetFunctionCall(false);
+        return GetFunctionCall(FunctionCallModes::kWithoutSemicolon);
     }
 
     auto variable = GetIdentifier();
@@ -425,7 +425,7 @@ NodePtr Parser::GetOp() { // NOLINT(misc-no-recursion)
             return GetAssign();
         }
 
-        return GetFunctionCall(true);
+        return GetFunctionCall(FunctionCallModes::kWithSemicolon);
 
     default:
         ReportError("Error while parsing operation: unexpected token");

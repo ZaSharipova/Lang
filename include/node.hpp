@@ -6,6 +6,8 @@
 #include <utility>
 #include <vector>
 
+#include "config.hpp"
+
 namespace paracl {
 
 class ValueNode;
@@ -52,6 +54,7 @@ public:
     INode() = default;
     virtual ~INode() = default;
     INode(const INode&) = delete;
+    INode(INode&&) = delete;
     INode& operator=(const INode&) = delete;
 
     virtual Status Accept(IVisitor& visitor) const = 0;
@@ -66,19 +69,19 @@ public:
 
 private:
     NodeBase() = default;
-    friend Derived;
+    friend Derived; // maybe there is a better solution
 };
 
 using NodePtr = std::unique_ptr<INode>;
 
 class ValueNode : public NodeBase<ValueNode> {
 public:
-    explicit ValueNode(uint64_t value)
+    explicit ValueNode(BaseValue value)
         : value_(value) { }
-    uint64_t GetValue() const { return value_; }
+    BaseValue GetValue() const { return value_; }
 
 private:
-    uint64_t value_;
+    BaseValue value_;
 };
 
 class VariableNode : public NodeBase<VariableNode> {
