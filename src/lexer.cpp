@@ -216,6 +216,7 @@ Token Lexer::LexPunctuation() {
         case '<': type = doesMatch('=', TokenType::kLessEq, TokenType::kLess); break;        
         case '>': type = doesMatch('=', TokenType::kGreatEq, TokenType::kGreat); break;        
 
+
         default: break;
     }
 
