@@ -27,6 +27,10 @@ set (FRONT_SRC
 )
 
 add_library(front ${FRONT_SRC})
+target_include_directories(front PUBLIC ${INCLUDE_DIR})
 
 add_executable(front_with_dump ${SRC_DIR}/main.cpp ${SRC_DIR}/dump_tree.cpp)
 target_link_libraries(front_with_dump PRIVATE front)
+
+
+add_subdirectory(tests)
