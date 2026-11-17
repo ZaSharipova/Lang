@@ -10,19 +10,20 @@
 
 namespace paracl::lexer {
 
-enum class TokenType : uint32_t { //NOLINT чётатам хочется 4 байта
+enum class TokenType : uint32_t { // NOLINT чётатам хочется 4 байта
     kKeyWordIf = 0,
     kKeyWordElse,
     kKeyWordWhile,
     kKeyWordReturn,
+    kKeyWordScan,
     kKeyWordPrint,
-    
+
     kEof,
     kError,
 
     kIdentifier,
     kIntLiteral,
-    
+
     kQuestion,
 
     kPlus,
@@ -57,29 +58,30 @@ struct Token {
 class SourceBuffer {
 public:
     SourceBuffer() = delete;
-    
+
     static SourceBuffer FromFile(const char* filepath);
     static SourceBuffer FromString(const std::string& str);
-    
+
     const char* data() const { return buffer_.data(); }
     uint32_t size() const { return buffer_.size() - 1; }
-    
+
     const char& operator[](std::size_t index) const { return buffer_[index]; }
     char& operator[](std::size_t index) { return buffer_[index]; }
 
     std::pair<std::size_t, std::size_t> GetLocation(uint32_t offset) const {
         if (newLines_.empty()) {
-            return {1, 1};
+            return { 1, 1 };
         }
 
         auto iterator = std::ranges::upper_bound(newLines_.begin(), newLines_.end(), offset);
         std::size_t lineIdx = std::distance(newLines_.begin(), iterator);
-        
-        return {lineIdx, offset - newLines_[lineIdx - 1] + 1};
+
+        return { lineIdx, offset - newLines_[lineIdx - 1] + 1 };
     }
-    
+
 private:
-    SourceBuffer(const std::vector<char>& buffer) : buffer_{buffer} {}
+    SourceBuffer(const std::vector<char>& buffer)
+        : buffer_ { buffer } { }
 
     void BuildNewLines() {
         newLines_.clear();
@@ -101,11 +103,11 @@ public:
     int64_t TokenToNum(Token token) const;
     std::string TokenToStr(Token token) const;
     void PrintError(Token token) const;
- 
- Lexer(const SourceBuffer& source)
-    : buffer_{source} {}
 
-  std::vector<Token> TokenizeAll();
+    Lexer(const SourceBuffer& source)
+        : buffer_ { source } { }
+
+    std::vector<Token> TokenizeAll();
 
 private:
     void SkipUselessText();
@@ -114,8 +116,8 @@ private:
     Token LexNumber();
     Token LexPunctuation();
 
-  const SourceBuffer& buffer_;
-  std::size_t cursor_ = 0;
+    const SourceBuffer& buffer_;
+    std::size_t cursor_ = 0;
 };
 
 } // namespace paracl::lexer

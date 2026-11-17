@@ -237,7 +237,7 @@ TEST(ParserTest, IfElseStatement) {
     const auto* if_only = As<IfNode>(body->GetStatements()[1].get());
     ASSERT_NE(if_only, nullptr);
     EXPECT_EQ(if_only->GetElse(), nullptr);
-    EXPECT_EQ(As<OpNode>(if_only->GetCondition())->GetType(), OpType::kEq);
+    EXPECT_EQ(As<OpNode>(if_only->GetCondition())->GetType(), OpType::kEQ);
 }
 
 TEST(ParserTest, WhileAndComparisons) {
@@ -258,7 +258,7 @@ TEST(ParserTest, WhileAndComparisons) {
 
     const auto* while_node = As<WhileNode>(body->GetStatements()[0].get());
     ASSERT_NE(while_node, nullptr);
-    EXPECT_EQ(As<OpNode>(while_node->GetCondition())->GetType(), OpType::kNe);
+    EXPECT_EQ(As<OpNode>(while_node->GetCondition())->GetType(), OpType::kNE);
 
     const auto* while_body = As<ScopeNode>(while_node->GetBody());
     ASSERT_NE(while_body, nullptr);

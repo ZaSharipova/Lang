@@ -43,8 +43,8 @@ constexpr OpDescription g_kOps[] = {
     { .type = OpType::kG, .name = ">", .style = g_kCompare },
     { .type = OpType::kLE, .name = "<=", .style = g_kCompare },
     { .type = OpType::kGE, .name = ">=", .style = g_kCompare },
-    { .type = OpType::kEq, .name = "==", .style = g_kCompare },
-    { .type = OpType::kNe, .name = "!=", .style = g_kCompare },
+    { .type = OpType::kEQ, .name = "==", .style = g_kCompare },
+    { .type = OpType::kNE, .name = "!=", .style = g_kCompare },
 };
 
 constexpr OpDescription g_kUnknownOp { .type = OpType { }, .name = "?", .style = g_kUnknown };
@@ -104,89 +104,105 @@ public:
         out_ << "}\n";
     }
 
-    void Visit(const ValueNode& node) override {
+    Status Visit(const ValueNode& node) override {
         Emit(node, "num", std::to_string(node.GetValue()), g_kNumber);
+        return Status::kOk;
     }
 
-    void Visit(const VariableNode& node) override {
+    Status Visit(const VariableNode& node) override {
         Emit(node, "var", node.GetVariable(), g_kVar);
+        return Status::kOk;
     }
 
-    void Visit(const OpNode& node) override {
+    Status Visit(const OpNode& node) override {
         const OpDescription& op_desc = OpInfo(node.GetType());
         Emit(node, "op", op_desc.name, op_desc.style);
         Link(node, node.GetLeft(), "L");
         Link(node, node.GetRight(), "R");
+        return Status::kOk;
     }
 
-    void Visit(const AssignNode& node) override {
+    Status Visit(const AssignNode& node) override {
         Emit(node, "assign", node.GetName() + " =", g_kStmt);
         Link(node, node.GetExpr());
+        return Status::kOk;
     }
 
-    void Visit(const PrintNode& node) override {
+    Status Visit(const ScanNode& node) override {
+        Emit(node, "stmt", "scan", g_kStmt);
+        Link(node, node.GetVariable());
+        return Status::kOk;
+    }
+
+    Status Visit(const PrintNode& node) override {
         Emit(node, "stmt", "print", g_kStmt);
         Link(node, node.GetExpr());
+        return Status::kOk;
     }
 
-    void Visit(const ReturnNode& node) override {
+    Status Visit(const ReturnNode& node) override {
         Emit(node, "stmt", "return", g_kStmt);
         Link(node, node.GetExpr());
+        return Status::kOk;
     }
 
-    void Visit(const ProgramNode& node) override {
+    Status Visit(const ProgramNode& node) override {
         Emit(node, "program", "", g_kControl);
         std::size_t index = 1;
         for (const auto& func : node.GetFunctions()) {
             Link(node, func.get(), std::to_string(index++));
         }
+        return Status::kOk;
     }
 
-    void Visit(const ScopeNode& node) override {
+    Status Visit(const ScopeNode& node) override {
         Emit(node, "scope", "{ }", g_kStmt);
         std::size_t index = 1;
         for (const NodePtr& stmt : node.GetStatements()) {
             Link(node, stmt.get(), std::to_string(index++));
         }
+        return Status::kOk;
     }
 
-    void Visit(const FunctionNode& node) override {
+    Status Visit(const FunctionNode& node) override {
         std::string signature = node.GetName() + '(';
         bool first = true;
         for (const std::string& param : node.GetParams()) {
             if (!first) {
                 signature += ", ";
             }
-
             signature += param;
             first = false;
         }
-
         signature += ')';
 
         Emit(node, "function", signature, g_kControl);
         Link(node, node.GetBody(), "body");
+        return Status::kOk;
     }
 
-    void Visit(const CallNode& node) override {
+    Status Visit(const CallNode& node) override {
         Emit(node, "call", node.GetName(), g_kStmt);
         std::size_t index = 1;
         for (const NodePtr& arg : node.GetArgs()) {
             Link(node, arg.get(), "arg " + std::to_string(index++));
         }
+        return Status::kOk;
     }
 
-    void Visit(const IfNode& node) override {
+    Status Visit(const IfNode& node) override {
         Emit(node, "control", "if", g_kControl);
         Link(node, node.GetCondition(), "cond");
         Link(node, node.GetBody(), "then");
         Link(node, node.GetElse(), "else");
+        return Status::kOk;
     }
 
-    void Visit(const WhileNode& node) override {
+    Status Visit(const WhileNode& node) override {
         Emit(node, "control", "while", g_kControl);
         Link(node, node.GetCondition(), "cond");
         Link(node, node.GetBody(), "body");
+        return Status::kOk;
     }
 
 private:

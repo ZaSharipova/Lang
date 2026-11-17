@@ -14,11 +14,11 @@
 namespace paracl::lexer {
 
 static inline std::unordered_map<std::string, TokenType> g_kKeyWords = {
-    {"if", TokenType::kKeyWordIf},
-    {"else", TokenType::kKeyWordElse},
-    {"while", TokenType::kKeyWordWhile},
-    {"return", TokenType::kKeyWordReturn},
-    {"print", TokenType::kKeyWordPrint},
+    { "if", TokenType::kKeyWordIf },
+    { "else", TokenType::kKeyWordElse },
+    { "while", TokenType::kKeyWordWhile },
+    { "return", TokenType::kKeyWordReturn },
+    { "print", TokenType::kKeyWordPrint },
 };
 
 static const char g_kOpenCommentChars[] = "/*";
@@ -85,7 +85,7 @@ SourceBuffer SourceBuffer::FromString(const std::string& str) {
 int64_t Lexer::TokenToNum(Token token) const {
     int64_t value = 0;
     auto [ptr, ec] = std::from_chars(buffer_.data() + token.offset, buffer_.data() + token.offset + token.len, value);
-    if (ec == std::errc{}) {
+    if (ec == std::errc { }) {
         return value;
     }
 
@@ -130,7 +130,7 @@ void Lexer::SkipUselessText() {
 
 Token Lexer::NextToken() {
     SkipUselessText();
-    
+
     if (cursor_ == static_cast<std::size_t>(buffer_.size())) {
         return Token(TokenType::kEof, static_cast<uint32_t>(cursor_), 0);
     }
@@ -160,7 +160,7 @@ Token Lexer::LexIdentifierOrKeyword() {
     if (g_kKeyWords.contains(identifier)) {
         type = g_kKeyWords[identifier];
     }
-    
+
     return Token(type, offset, len);
 }
 
@@ -172,7 +172,7 @@ Token Lexer::LexNumber() {
 
     auto offset = static_cast<uint32_t>(start);
     auto len = static_cast<uint32_t>(cursor_ - start);
-    
+
     if (IsAlpha(buffer_[cursor_]) != 0) {
         while (IsAlnum(buffer_[cursor_]) != 0) {
             cursor_++;
@@ -193,31 +193,63 @@ Token Lexer::LexPunctuation() {
             cursor_++;
             return matchType;
         }
-        return defaultType;  
+        return defaultType;
     };
 
     char character = buffer_[cursor_++];
     switch (character) {
-        case '?': type = TokenType::kQuestion; break;
-        case '+': type = TokenType::kPlus; break;
-        case '-': type = TokenType::kMinus; break;
-        case '*': type = TokenType::kStar; break;
-        case '/': type = TokenType::kSlash; break;
-        case '%': type = TokenType::kPercent; break;
-        case '(': type = TokenType::kLParen; break;
-        case ')': type = TokenType::kRParen; break;
-        case '{': type = TokenType::kLBrace; break;
-        case '}': type = TokenType::kRBrace; break;
-        case ';': type = TokenType::kSemicolon; break;
-        case ',': type = TokenType::kComma; break;
+    case '?':
+        type = TokenType::kQuestion;
+        break;
+    case '+':
+        type = TokenType::kPlus;
+        break;
+    case '-':
+        type = TokenType::kMinus;
+        break;
+    case '*':
+        type = TokenType::kStar;
+        break;
+    case '/':
+        type = TokenType::kSlash;
+        break;
+    case '%':
+        type = TokenType::kPercent;
+        break;
+    case '(':
+        type = TokenType::kLParen;
+        break;
+    case ')':
+        type = TokenType::kRParen;
+        break;
+    case '{':
+        type = TokenType::kLBrace;
+        break;
+    case '}':
+        type = TokenType::kRBrace;
+        break;
+    case ';':
+        type = TokenType::kSemicolon;
+        break;
+    case ',':
+        type = TokenType::kComma;
+        break;
 
-        case '=': type = doesMatch('=', TokenType::kEqualEqual, TokenType::kEqual); break;
-        case '!': type = doesMatch('=', TokenType::kNotEqual, TokenType::kError); break;
-        case '<': type = doesMatch('=', TokenType::kLessEq, TokenType::kLess); break;        
-        case '>': type = doesMatch('=', TokenType::kGreatEq, TokenType::kGreat); break;        
+    case '=':
+        type = doesMatch('=', TokenType::kEqualEqual, TokenType::kEqual);
+        break;
+    case '!':
+        type = doesMatch('=', TokenType::kNotEqual, TokenType::kError);
+        break;
+    case '<':
+        type = doesMatch('=', TokenType::kLessEq, TokenType::kLess);
+        break;
+    case '>':
+        type = doesMatch('=', TokenType::kGreatEq, TokenType::kGreat);
+        break;
 
-
-        default: break;
+    default:
+        break;
     }
 
     auto len = static_cast<uint32_t>(cursor_ - offset);
@@ -245,31 +277,31 @@ std::vector<Token> Lexer::TokenizeAll() {
 
 void Lexer::PrintError(Token token) const {
     auto [line, col] = buffer_.GetLocation(token.offset);
-    
+
     const char* bufStart = buffer_.data();
     const char* bufEnd = bufStart + buffer_.size();
-    
-    const char* lineStart = bufStart + token.offset - (col - 1);    
+
+    const char* lineStart = bufStart + token.offset - (col - 1);
 
     const char* lineEnd = lineStart;
     while (lineEnd < bufEnd && *lineEnd != '\n' && *lineEnd != '\r') {
         ++lineEnd;
     }
-    
+
     std::string_view lineStr(lineStart, lineEnd - lineStart);
     std::string_view badToken(bufStart + token.offset, token.len);
 
     std::cerr << "Syntax error at " << line << ":" << col << " bad token '" << badToken << "'\n";
-    
+
     std::string linePrefix = " " + std::to_string(line) + " | ";
     std::cerr << linePrefix << lineStr << "\n";
-    
+
     std::cerr << std::string(linePrefix.size() - 2, ' ') << "| ";
-    
+
     for (std::size_t i = 0; i < col - 1; ++i) {
         std::cerr << (lineStr[i] == '\t' ? '\t' : ' ');
     }
-    
+
     std::cerr << '^';
     if (token.len > 1) {
         std::cerr << std::string(token.len - 1, '~');
