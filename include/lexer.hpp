@@ -2,8 +2,11 @@
 
 #include <algorithm>
 #include <cstdint>
+#include <cstddef>
+#include <iterator>
 #include <vector>
 #include <string>
+#include <utility>
 
 namespace paracl::lexer {
 

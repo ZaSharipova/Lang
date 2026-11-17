@@ -1,10 +1,12 @@
 #include "lexer.hpp"
 
 #include <iostream>
+#include <cctype>
+#include <charconv>
+#include <stdexcept>
+#include <system_error>
 #include <fstream>
 #include <vector>
-#include <charconv>
-#include <cctype>
 #include <unordered_map>
 #include <string>
 #include <string_view>

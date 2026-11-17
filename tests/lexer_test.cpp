@@ -1,5 +1,11 @@
 #include <gtest/gtest.h>
+#include <cstddef>
+#include <vector>
+#include <string>
+#include <utility>
+
 #include "lexer.hpp"
+
 
 namespace paracl::lexer::tests {
 
