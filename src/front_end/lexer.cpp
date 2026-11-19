@@ -1,15 +1,15 @@
 #include "lexer.hpp"
 
-#include <iostream>
 #include <cctype>
 #include <charconv>
-#include <stdexcept>
-#include <system_error>
 #include <fstream>
-#include <vector>
-#include <unordered_map>
+#include <iostream>
+#include <stdexcept>
 #include <string>
 #include <string_view>
+#include <system_error>
+#include <unordered_map>
+#include <vector>
 
 namespace paracl::lexer {
 

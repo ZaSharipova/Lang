@@ -1,8 +1,8 @@
 #include <gtest/gtest.h>
 #include <memory>
 #include <string>
-#include <vector>
 #include <utility>
+#include <vector>
 
 #include "lexer.hpp"
 #include "node.hpp"
@@ -60,12 +60,12 @@ TEST(ParserTest, FunctionDeclarationsAndParams) {
     const auto* fn1 = As<FunctionNode>(funcs[1].get());
     ASSERT_NE(fn1, nullptr);
     EXPECT_EQ(fn1->GetName(), "single");
-    EXPECT_EQ(fn1->GetParams(), (std::vector<std::string>{"x"}));
+    EXPECT_EQ(fn1->GetParams(), (std::vector<std::string> { "x" }));
 
     const auto* fn2 = As<FunctionNode>(funcs[2].get());
     ASSERT_NE(fn2, nullptr);
     EXPECT_EQ(fn2->GetName(), "multi");
-    EXPECT_EQ(fn2->GetParams(), (std::vector<std::string>{"a", "b", "c"}));
+    EXPECT_EQ(fn2->GetParams(), (std::vector<std::string> { "a", "b", "c" }));
 }
 
 TEST(ParserTest, OperatorPrecedence) {

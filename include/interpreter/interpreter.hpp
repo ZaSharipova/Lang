@@ -4,11 +4,30 @@
 #include "node.hpp"
 
 #include <iostream>
+#include <optional>
+#include <string>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
 
 namespace paracl::interpreter {
+enum class TaskType : uint8_t {
+    kEval,
+    kFinishOp,
+    kReturn,
+    kPrint,
+    kFinishIf,
+    kFinishWhile,
+    kFinishCall,
+    kFinishAssign,
+    kLeaveScope,
+    kBoundary,
+};
+
+struct Task {
+    TaskType type;
+    const INode* node = nullptr;
+};
 
 class Interpreter : public IVisitor {
 public:
@@ -16,13 +35,18 @@ public:
 
     bool RunInterpreter(const INode& root) {
         ClearInterpreterFields();
-
-        const Status res = root.Accept(*this);
-        if (res != Status::kOk) {
-            HandleErrors();
+        PushToTasks(TaskType::kEval, &root);
+        while (!tasks_.empty() && !error_) {
+            const Task task = tasks_.back();
+            tasks_.pop_back();
+            ApplyTask(task);
         }
 
-        return res == Status::kOk;
+        if (error_) {
+            std::cout << *error_ << '\n';
+        }
+
+        return !error_;
     }
 
     Status Visit(const ValueNode& node) override;
@@ -41,21 +65,35 @@ public:
 
 private:
     void ClearInterpreterFields() {
-        errors_.clear();
         functionTable_.clear();
-        result_ = 0;
+        tasks_.clear();
+        values_.clear();
+        return_value_ = 0;
+        error_.reset();
     }
 
-    void HandleErrors() const {
-        for (const auto& error : errors_) {
-            std::cout << error << '\n';
-        }
+    void PushToTasks(TaskType type, const INode* node = nullptr) {
+        tasks_.push_back({ .type = type, .node = node });
     }
+
+    BaseValue PopFromValues() {
+        const BaseValue val = values_.back();
+        values_.pop_back();
+        return val;
+    }
+
+    void ApplyTask(const Task& task);
+    BaseValue Apply(const OpNode& node, const BaseValue& lhs, const BaseValue& rhs);
+    void FinishFrame();
+    void Unwind();
+    void SetError(std::string error_message);
 
     Context env_;
     std::unordered_map<std::string_view, const paracl::FunctionNode*> functionTable_;
-    BaseValue result_ = 0;
-    std::vector<std::string> errors_;
+    std::optional<std::string> error_;
+    std::vector<Task> tasks_;
+    std::vector<BaseValue> values_;
+    BaseValue return_value_ = 0;
 };
 
 } // namespace paracl::interpreter

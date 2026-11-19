@@ -112,7 +112,7 @@ protected:
     template <class... Functions>
     Status RunProgram(Functions&&... functions) {
         BuildProgram(std::forward<Functions>(functions)...);
-        return program_->Accept(interpreter_);
+        return interpreter_.RunInterpreter(*program_) ? Status::kOk : Status::kError;
     }
 
     template <class... Functions>
@@ -196,9 +196,16 @@ INSTANTIATE_TEST_SUITE_P(
         return std::string(param_info.param.name);
     });
 
-TEST_F(InterpreterTest, DivisionByZeroThrows) {
-    EXPECT_THROW(RunMain(MakePrint(MakeOp(OpType::kDiv, MakeValue(1), MakeValue(0)))),
-        std::runtime_error);
+TEST_F(InterpreterTest, DivisionByZeroIsError) {
+    EXPECT_EQ(RunMain(MakePrint(MakeOp(OpType::kDiv, MakeValue(1), MakeValue(0)))),
+        Status::kError);
+    EXPECT_EQ(Output(), "division by zero\n");
+}
+
+TEST_F(InterpreterTest, ModuloByZeroIsError) {
+    EXPECT_EQ(RunMain(MakePrint(MakeOp(OpType::kMod, MakeValue(1), MakeValue(0)))),
+        Status::kError);
+    EXPECT_EQ(Output(), "division by zero\n");
 }
 
 TEST_F(InterpreterTest, ErrorInLeftOperandPropagates) {
@@ -244,7 +251,7 @@ TEST_F(InterpreterTest, AssignFromExpression) {
 TEST_F(InterpreterTest, FailedAssignDoesNotCreateVariable) {
     EXPECT_EQ(RunMain(MakeAssign("a", MakeVariable("missing")), MakePrint(MakeVariable("a"))),
         Status::kError);
-    EXPECT_EQ(Output(), "");
+    EXPECT_EQ(Output(), "Undefined variable: missing\n");
 }
 
 TEST_F(InterpreterTest, ScanReadsValue) {
@@ -269,7 +276,7 @@ TEST_F(InterpreterTest, PrintMultipleValues) {
 
 TEST_F(InterpreterTest, PrintUndefinedVariableIsError) {
     EXPECT_EQ(RunMain(MakePrint(MakeVariable("missing"))), Status::kError);
-    EXPECT_EQ(Output(), "");
+    EXPECT_EQ(Output(), "Undefined variable: missing\n");
 }
 
 TEST_F(InterpreterTest, InnerVariableNotVisibleOutside) {
@@ -302,7 +309,7 @@ TEST_F(InterpreterTest, ErrorStopsScope) {
                   MakeAssign("a", MakeVariable("missing")),
                   MakePrint(MakeValue(2))),
         Status::kError);
-    EXPECT_EQ(Output(), "1");
+    EXPECT_EQ(Output(), "1Undefined variable: missing\n");
 }
 
 TEST_F(InterpreterTest, IfTrueRunsBody) {
@@ -334,7 +341,7 @@ TEST_F(InterpreterTest, IfTrueSkipsElse) {
 TEST_F(InterpreterTest, IfConditionError) {
     EXPECT_EQ(RunMain(MakeIf(MakeVariable("missing"), MakeScope(MakePrint(MakeValue(1))))),
         Status::kError);
-    EXPECT_EQ(Output(), "");
+    EXPECT_EQ(Output(), "Undefined variable: missing\n");
 }
 
 TEST_F(InterpreterTest, ReturnInsideIfStopsExecution) {
@@ -563,6 +570,191 @@ TEST_F(InterpreterTest, RunInterpreterReportsPrintOfUndefinedVariable) {
     auto main_function = MakeFunction("main", { }, MakeScope(MakePrint(MakeVariable("ghost"))));
     EXPECT_FALSE(RunWithInterpreterEntryPoint(std::move(main_function)));
     EXPECT_TRUE(OutputContains("Undefined variable: ghost"));
+}
+
+TEST_F(InterpreterTest, RunInterpreterReportsDivisionByZero) {
+    auto main_function = MakeFunction("main", { },
+        MakeScope(MakePrint(MakeOp(OpType::kDiv, MakeValue(1), MakeValue(0)))));
+    EXPECT_FALSE(RunWithInterpreterEntryPoint(std::move(main_function)));
+    EXPECT_TRUE(OutputContains("division by zero"));
+}
+
+// Iterative interpreter: tests for the explicit task stack
+
+TEST_F(InterpreterTest, DeepRecursionDoesNotOverflowStack) {
+    auto sum_function = MakeFunction(
+        "sum", { "n" },
+        MakeScope(
+            MakeIf(MakeOp(OpType::kEQ, MakeVariable("n"), MakeValue(0)),
+                MakeScope(MakeReturn(MakeValue(0)))),
+            MakeReturn(MakeOp(
+                OpType::kAdd, MakeVariable("n"),
+                MakeCall("sum", MakeOp(OpType::kSub, MakeVariable("n"), MakeValue(1)))))));
+    auto main_function = MakeFunction("main", { }, MakeScope(MakePrint(MakeCall("sum", MakeValue(100000)))));
+    EXPECT_EQ(RunProgram(std::move(sum_function), std::move(main_function)), Status::kOk);
+    EXPECT_EQ(Output(), "5000050000");
+}
+
+TEST_F(InterpreterTest, ErrorInDeepRecursionStopsExecution) {
+    auto fail_function = MakeFunction(
+        "fail", { "n" },
+        MakeScope(
+            MakeIf(MakeOp(OpType::kEQ, MakeVariable("n"), MakeValue(0)),
+                MakeScope(MakeReturn(MakeVariable("missing")))),
+            MakeReturn(MakeCall("fail", MakeOp(OpType::kSub, MakeVariable("n"), MakeValue(1))))));
+    auto main_function = MakeFunction("main", { },
+        MakeScope(MakePrint(MakeCall("fail", MakeValue(1000))), MakePrint(MakeValue(1))));
+    EXPECT_EQ(RunProgram(std::move(fail_function), std::move(main_function)), Status::kError);
+    EXPECT_EQ(Output(), "Undefined variable: missing\n");
+}
+
+TEST_F(InterpreterTest, MainReturnZeroDoesNotHideError) {
+    auto main_function = MakeFunction("main", { },
+        MakeScope(MakePrint(MakeCall("missing", MakeValue(10))), MakeReturn(MakeValue(0))));
+    EXPECT_FALSE(RunWithInterpreterEntryPoint(std::move(main_function)));
+    EXPECT_EQ(Output(), "Function not found: missing\n");
+}
+
+TEST_F(InterpreterTest, OnlyFirstErrorIsReported) {
+    EXPECT_EQ(RunMain(MakePrint(MakeVariable("first")), MakePrint(MakeVariable("second"))),
+        Status::kError);
+    EXPECT_EQ(Output(), "Undefined variable: first\n");
+}
+
+TEST_F(InterpreterTest, ArgumentsEvaluatedLeftToRight) {
+    auto show_function = MakeFunction(
+        "show", { "x" }, MakeScope(MakePrint(MakeVariable("x")), MakeReturn(MakeVariable("x"))));
+    auto pair_function = MakeFunction(
+        "pair", { "a", "b" },
+        MakeScope(MakeReturn(MakeOp(OpType::kAdd,
+            MakeOp(OpType::kMul, MakeVariable("a"), MakeValue(10)),
+            MakeVariable("b")))));
+    auto main_function = MakeFunction(
+        "main", { },
+        MakeScope(MakePrint(MakeCall("pair",
+            MakeCall("show", MakeValue(1)),
+            MakeCall("show", MakeValue(2))))));
+    EXPECT_EQ(RunProgram(std::move(show_function), std::move(pair_function), std::move(main_function)),
+        Status::kOk);
+    EXPECT_EQ(Output(), "1212");
+}
+
+TEST_F(InterpreterTest, BinaryOperandsEvaluatedLeftToRight) {
+    auto show_function = MakeFunction(
+        "show", { "x" }, MakeScope(MakePrint(MakeVariable("x")), MakeReturn(MakeVariable("x"))));
+    auto main_function = MakeFunction(
+        "main", { },
+        MakeScope(MakePrint(MakeOp(OpType::kSub,
+            MakeCall("show", MakeValue(5)),
+            MakeCall("show", MakeValue(3))))));
+    EXPECT_EQ(RunProgram(std::move(show_function), std::move(main_function)), Status::kOk);
+    EXPECT_EQ(Output(), "532");
+}
+
+TEST_F(InterpreterTest, CallAsStatementRuns) {
+    auto hello_function = MakeFunction("hello", { }, MakeScope(MakePrint(MakeValue(1))));
+    auto main_function = MakeFunction(
+        "main", { }, MakeScope(MakeCall("hello"), MakeCall("hello"), MakePrint(MakeValue(2))));
+    EXPECT_EQ(RunProgram(std::move(hello_function), std::move(main_function)), Status::kOk);
+    EXPECT_EQ(Output(), "112");
+}
+
+TEST_F(InterpreterTest, CallAsStatementInsideLoop) {
+    auto hello_function = MakeFunction("hello", { }, MakeScope(MakePrint(MakeValue(1))));
+    auto loop = MakeWhile(
+        MakeOp(OpType::kL, MakeVariable("i"), MakeValue(3)),
+        MakeScope(MakeCall("hello"),
+            MakeAssign("i", MakeOp(OpType::kAdd, MakeVariable("i"), MakeValue(1)))));
+    auto main_function = MakeFunction(
+        "main", { }, MakeScope(MakeAssign("i", MakeValue(0)), std::move(loop), MakePrint(MakeVariable("i"))));
+    EXPECT_EQ(RunProgram(std::move(hello_function), std::move(main_function)), Status::kOk);
+    EXPECT_EQ(Output(), "1113");
+}
+
+TEST_F(InterpreterTest, ReturnFromNestedScopesRestoresCallerScope) {
+    auto nested_function = MakeFunction(
+        "nested", { },
+        MakeScope(
+            MakeAssign("a", MakeValue(5)),
+            MakeScope(
+                MakeAssign("b", MakeValue(6)),
+                MakeIf(MakeValue(1), MakeScope(MakeReturn(MakeVariable("b")))))));
+    auto main_function = MakeFunction(
+        "main", { },
+        MakeScope(
+            MakeAssign("x", MakeValue(10)),
+            MakePrint(MakeCall("nested")),
+            MakePrint(MakeVariable("x")),
+            MakeAssign("y", MakeValue(1)),
+            MakePrint(MakeVariable("y"))));
+    EXPECT_EQ(RunProgram(std::move(nested_function), std::move(main_function)), Status::kOk);
+    EXPECT_EQ(Output(), "6101");
+}
+
+TEST_F(InterpreterTest, ReturnInCalleeDoesNotStopCaller) {
+    auto early_function = MakeFunction(
+        "early", { }, MakeScope(MakeReturn(MakeValue(1)), MakePrint(MakeValue(9))));
+    auto main_function = MakeFunction(
+        "main", { },
+        MakeScope(MakePrint(MakeCall("early")), MakePrint(MakeCall("early")), MakePrint(MakeValue(2))));
+    EXPECT_EQ(RunProgram(std::move(early_function), std::move(main_function)), Status::kOk);
+    EXPECT_EQ(Output(), "112");
+}
+
+TEST_F(InterpreterTest, ReturnValueUsedInExpression) {
+    auto five_function = MakeFunction("five", { }, MakeScope(MakeReturn(MakeValue(5))));
+    auto main_function = MakeFunction(
+        "main", { },
+        MakeScope(MakePrint(MakeOp(OpType::kAdd,
+            MakeCall("five"),
+            MakeOp(OpType::kMul, MakeCall("five"), MakeValue(2))))));
+    EXPECT_EQ(RunProgram(std::move(five_function), std::move(main_function)), Status::kOk);
+    EXPECT_EQ(Output(), "15");
+}
+
+TEST_F(InterpreterTest, MutualRecursion) {
+    auto even_function = MakeFunction(
+        "is_even", { "n" },
+        MakeScope(
+            MakeIf(MakeOp(OpType::kEQ, MakeVariable("n"), MakeValue(0)),
+                MakeScope(MakeReturn(MakeValue(1)))),
+            MakeReturn(MakeCall("is_odd", MakeOp(OpType::kSub, MakeVariable("n"), MakeValue(1))))));
+    auto odd_function = MakeFunction(
+        "is_odd", { "n" },
+        MakeScope(
+            MakeIf(MakeOp(OpType::kEQ, MakeVariable("n"), MakeValue(0)),
+                MakeScope(MakeReturn(MakeValue(0)))),
+            MakeReturn(MakeCall("is_even", MakeOp(OpType::kSub, MakeVariable("n"), MakeValue(1))))));
+    auto main_function = MakeFunction(
+        "main", { },
+        MakeScope(MakePrint(MakeCall("is_even", MakeValue(10))),
+            MakePrint(MakeCall("is_even", MakeValue(7)))));
+    EXPECT_EQ(RunProgram(std::move(even_function), std::move(odd_function), std::move(main_function)),
+        Status::kOk);
+    EXPECT_EQ(Output(), "10");
+}
+
+TEST_F(InterpreterTest, FunctionDefinedAfterMainIsCallable) {
+    auto main_function = MakeFunction("main", { }, MakeScope(MakePrint(MakeCall("late"))));
+    auto late_function = MakeFunction("late", { }, MakeScope(MakeReturn(MakeValue(4))));
+    EXPECT_EQ(RunProgram(std::move(main_function), std::move(late_function)), Status::kOk);
+    EXPECT_EQ(Output(), "4");
+}
+
+TEST_F(InterpreterTest, InterpreterCanBeReused) {
+    auto first_main = MakeFunction("main", { }, MakeScope(MakePrint(MakeValue(1))));
+    EXPECT_TRUE(RunWithInterpreterEntryPoint(std::move(first_main)));
+    auto second_main = MakeFunction("main", { }, MakeScope(MakePrint(MakeValue(2))));
+    EXPECT_TRUE(RunWithInterpreterEntryPoint(std::move(second_main)));
+    EXPECT_EQ(Output(), "12");
+}
+
+TEST_F(InterpreterTest, ErrorIsResetBetweenRuns) {
+    auto broken_main = MakeFunction("main", { }, MakeScope(MakePrint(MakeVariable("missing"))));
+    EXPECT_FALSE(RunWithInterpreterEntryPoint(std::move(broken_main)));
+    auto good_main = MakeFunction("main", { }, MakeScope(MakePrint(MakeValue(1))));
+    EXPECT_TRUE(RunWithInterpreterEntryPoint(std::move(good_main)));
+    EXPECT_EQ(Output(), "Undefined variable: missing\n1");
 }
 
 } // namespace

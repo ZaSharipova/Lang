@@ -1,12 +1,12 @@
 #pragma once
 
 #include <algorithm>
-#include <cstdint>
 #include <cstddef>
+#include <cstdint>
 #include <iterator>
-#include <vector>
 #include <string>
 #include <utility>
+#include <vector>
 
 namespace paracl::lexer {
 

@@ -50,6 +50,18 @@ public:
         }
     }
 
+    void PushFrame() {
+        frameBases_.push_back(frameBase_);
+        frameBase_ = vars_.size();
+        PushScope();
+    }
+
+    void PopFrame() {
+        PopScope();
+        frameBase_ = frameBases_.back();
+        frameBases_.pop_back();
+    }
+
     std::size_t GetFrameBase() const { return frameBase_; }
     void SetFrameBase(std::size_t base) { frameBase_ = base; }
     std::size_t Size() const { return vars_.size(); }
@@ -59,9 +71,10 @@ private:
     std::vector<std::size_t> scopeStarts_;
     std::vector<std::pair<std::string_view, BaseValue>> globals_;
     std::size_t frameBase_ = 0;
+    std::vector<std::size_t> frameBases_;
 };
 
-class ScopeGuard {
+class ScopeGuard { // now is unused, but maybe one day...
 public:
     explicit ScopeGuard(Context& env)
         : env_(env) { env_.PushScope(); }
