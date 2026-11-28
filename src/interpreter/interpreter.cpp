@@ -1,6 +1,9 @@
 #include "interpreter.hpp"
 #include "node.hpp"
 
+#include <cassert>
+#include <stdexcept>
+
 namespace paracl::interpreter {
 
 Status Interpreter::Visit(const ValueNode& node) {
@@ -10,10 +13,7 @@ Status Interpreter::Visit(const ValueNode& node) {
 
 Status Interpreter::Visit(const VariableNode& node) {
     BaseValue* value = env_.Lookup(node.GetVariable());
-    if (!value) {
-        SetError("Undefined variable: " + node.GetVariable());
-        return Status::kError;
-    }
+    assert(value && "undefined variable must be rejected by the parser");
 
     values_.push_back(*value);
     return Status::kOk;
@@ -61,21 +61,10 @@ Status Interpreter::Visit(const FunctionNode&) {
 }
 
 Status Interpreter::Visit(const CallNode& node) {
-    auto it = functionTable_.find(node.GetName());
-    if (it == functionTable_.end()) {
-        SetError("Function not found: " + node.GetName());
-        return Status::kOk;
-    }
-
-    if (it->second->GetParams().size() != node.GetArgs().size()) {
-        SetError("Function " + node.GetName() + " expects " + std::to_string(it->second->GetParams().size()) + " arguments, got " + std::to_string(node.GetArgs().size()));
-        return Status::kOk;
-    }
-
     PushToTasks(TaskType::kFinishCall, &node);
     const auto& args = node.GetArgs();
-    for (auto it = args.rbegin(); it != args.rend(); ++it) {
-        PushToTasks(TaskType::kEval, it->get());
+    for (auto arg = args.rbegin(); arg != args.rend(); ++arg) {
+        PushToTasks(TaskType::kEval, arg->get());
     }
 
     return Status::kOk;
@@ -83,24 +72,10 @@ Status Interpreter::Visit(const CallNode& node) {
 
 Status Interpreter::Visit(const ProgramNode& node) {
     for (const auto& func : node.GetFunctions()) {
-        if (!functionTable_.emplace(func->GetName(), func.get()).second) {
-            SetError("Redefinition of function: " + func->GetName());
-            return Status::kOk;
-        }
+        functionTable_.emplace(func->GetName(), func.get());
     }
 
-    auto it = functionTable_.find("main");
-    if (it == functionTable_.end()) {
-        SetError("Function 'main' not found");
-        return Status::kOk;
-    }
-
-    if (it->second->GetParamsSize() != 0) {
-        SetError("Function 'main' must have no parameters");
-        return Status::kOk;
-    }
-
-    PushToTasks(TaskType::kEval, it->second->GetBody());
+    PushToTasks(TaskType::kEval, functionTable_.at("main")->GetBody());
     return Status::kOk;
 }
 

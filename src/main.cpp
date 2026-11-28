@@ -5,11 +5,11 @@
 #include "parser.hpp"
 
 int main(void) {
-    paracl::lexer::SourceBuffer source = paracl::lexer::SourceBuffer::FromFile("input.txt");
-    paracl::lexer::Lexer lexer(source);
-    std::vector<paracl::lexer::Token> tokens = lexer.TokenizeAll();
+    // paracl::lexer::SourceBuffer source = paracl::lexer::SourceBuffer::FromFile("input.txt");
+    // paracl::lexer::Lexer lexer(source);
+    // std::vector<paracl::lexer::Token> tokens = lexer.TokenizeAll();
 
-    paracl::parser::Parser parser(&lexer, std::move(tokens));
+    paracl::parser::Parser parser("input.txt");
     paracl::NodePtr root = parser.Parse();
 
     if (!root) {

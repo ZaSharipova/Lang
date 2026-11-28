@@ -74,7 +74,7 @@ TEST(LexerTest, IntegerLiterals) {
 
 TEST(LexerTest, OperatorsAndPunctuation) {
     ExpectTokenTypes(
-        "+ - * / % ? ( ) { } ;",
+        "+ - * / % ? ( ) { } ; ,",
         { TokenType::kPlus,
             TokenType::kMinus,
             TokenType::kStar,
@@ -86,6 +86,7 @@ TEST(LexerTest, OperatorsAndPunctuation) {
             TokenType::kLBrace,
             TokenType::kRBrace,
             TokenType::kSemicolon,
+            TokenType::kComma,
             TokenType::kEof });
 }
 

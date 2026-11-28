@@ -13,11 +13,11 @@ namespace paracl::parser::tests {
 namespace {
 
 std::unique_ptr<ProgramNode> ParseProgram(const std::string& code) {
-    auto buffer = lexer::SourceBuffer::FromString(code);
-    lexer::Lexer lexer(buffer);
-    auto tokens = lexer.TokenizeAll();
+    // auto buffer = lexer::SourceBuffer::FromString(code);
+    // lexer::Lexer lexer(buffer);
+    // auto tokens = lexer.TokenizeAll();
 
-    Parser parser(&lexer, std::move(tokens));
+    Parser parser(code);
     NodePtr root = parser.Parse();
     if (!root) {
         return nullptr;
@@ -40,7 +40,7 @@ const NodeT* As(const INode* node) {
 
 TEST(ParserTest, FunctionDeclarationsAndParams) {
     auto prog = ParseProgram(R"(
-        empty() {}
+        main() {}
         single(x) { return x; }
         multi(a, b, c) { return a; }
     )");
@@ -51,7 +51,7 @@ TEST(ParserTest, FunctionDeclarationsAndParams) {
 
     const auto* fn0 = As<FunctionNode>(funcs[0].get());
     ASSERT_NE(fn0, nullptr);
-    EXPECT_EQ(fn0->GetName(), "empty");
+    EXPECT_EQ(fn0->GetName(), "main");
     EXPECT_TRUE(fn0->GetParams().empty());
     const auto* body0 = As<ScopeNode>(fn0->GetBody());
     ASSERT_NE(body0, nullptr);
@@ -197,6 +197,8 @@ TEST(ParserTest, AssignAndFunctionCalls) {
 TEST(ParserTest, IfElseStatement) {
     auto prog = ParseProgram(R"(
         main() {
+            a = 1;
+            b = 2;
             if (a <= b) {
                 print(a);
             } else {
@@ -211,9 +213,9 @@ TEST(ParserTest, IfElseStatement) {
 
     const auto* fn = As<FunctionNode>(prog->GetFunctions()[0].get());
     const auto* body = As<ScopeNode>(fn->GetBody());
-    ASSERT_EQ(body->GetStatements().size(), 2u);
+    ASSERT_EQ(body->GetStatements().size(), 4u);
 
-    const auto* if_else = As<IfNode>(body->GetStatements()[0].get());
+    const auto* if_else = As<IfNode>(body->GetStatements()[2].get());
     ASSERT_NE(if_else, nullptr);
 
     const auto* cond = As<OpNode>(if_else->GetCondition());
@@ -234,7 +236,7 @@ TEST(ParserTest, IfElseStatement) {
     ASSERT_NE(print_b, nullptr);
     EXPECT_EQ(As<VariableNode>(print_b->GetExpr())->GetVariable(), "b");
 
-    const auto* if_only = As<IfNode>(body->GetStatements()[1].get());
+    const auto* if_only = As<IfNode>(body->GetStatements()[3].get());
     ASSERT_NE(if_only, nullptr);
     EXPECT_EQ(if_only->GetElse(), nullptr);
     EXPECT_EQ(As<OpNode>(if_only->GetCondition())->GetType(), OpType::kEQ);
@@ -243,6 +245,7 @@ TEST(ParserTest, IfElseStatement) {
 TEST(ParserTest, WhileAndComparisons) {
     auto prog = ParseProgram(R"(
         main() {
+            i = 0;
             while (i != 10) {
                 if (i < 5) { i = i + 1; }
                 if (i > 5) { i = i + 2; }
@@ -254,9 +257,9 @@ TEST(ParserTest, WhileAndComparisons) {
 
     const auto* fn = As<FunctionNode>(prog->GetFunctions()[0].get());
     const auto* body = As<ScopeNode>(fn->GetBody());
-    ASSERT_EQ(body->GetStatements().size(), 1u);
+    ASSERT_EQ(body->GetStatements().size(), 2u);
 
-    const auto* while_node = As<WhileNode>(body->GetStatements()[0].get());
+    const auto* while_node = As<WhileNode>(body->GetStatements()[1].get());
     ASSERT_NE(while_node, nullptr);
     EXPECT_EQ(As<OpNode>(while_node->GetCondition())->GetType(), OpType::kNE);
 
@@ -285,6 +288,38 @@ TEST(ParserTest, SyntaxErrors) {
 
     for (const auto& bad_code : invalid_inputs) {
         EXPECT_EQ(ParseProgram(bad_code), nullptr);
+    }
+}
+
+// Semantic checks (name_checker): this used to be the interpreter's job.
+
+TEST(ParserTest, InnerScopeSeesOuterVariable) {
+    EXPECT_NE(ParseProgram("main() { x = 1; if (1) { print(x); } }"), nullptr);
+}
+
+TEST(ParserTest, SemanticErrors) {
+    const std::vector<std::string> invalid_inputs = {
+        // undefined variable
+        "main() { y = x; }",
+        "main() { print(x); }",
+        // variable declared in an inner scope is not visible outside it
+        "main() { if (1) { x = 1; } y = x; }",
+        // main is missing
+        "other() { }",
+        // main must have no parameters
+        "main(argc) { }",
+        // local variable of a callee does not leak to the caller
+        "f() { local = 1; } main() { f(); y = local; }",
+        // unknown function
+        "main() { y = missing(); }",
+        // wrong number of arguments
+        "id(v) { return v; } main() { y = id(1, 2); }",
+        // redefinition of a function
+        "dup() { } dup() { } main() { }"
+    };
+
+    for (const auto& bad_code : invalid_inputs) {
+        EXPECT_EQ(ParseProgram(bad_code), nullptr) << bad_code;
     }
 }
 

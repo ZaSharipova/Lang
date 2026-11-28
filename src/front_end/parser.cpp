@@ -7,6 +7,7 @@
 
 #include "lexer.hpp"
 #include "node.hpp"
+#include "name_checker.hpp"
 
 /* G          ::= FUNCTION_D+
    FUNCTION_D ::= V "(" [ E {"," E}* ] ")" "{" OP* "}"
@@ -44,6 +45,11 @@ NodePtr Parser::Parse() {
         root->AddFunction(std::move(function));
     }
 
+    if (!checker_.CheckFunctions()) {
+        ReportCheckerError();
+        return nullptr;
+    }
+
     return root;
 }
 
@@ -78,7 +84,13 @@ std::unique_ptr<FunctionNode> Parser::GetFunctionDeclare() {
         return nullptr;
     }
 
+    if (!checker_.BeginFunction(name, args, name_token)) {
+        ReportCheckerError();
+        return nullptr;
+    }
+
     NodePtr body = GetBody();
+    checker_.EndFunction();
     if (!body) {
         return nullptr;
     }
@@ -122,6 +134,7 @@ NodePtr Parser::GetFunctionCall(FunctionCallModes mode) { // NOLINT(misc-no-recu
         return nullptr;
     }
 
+    checker_.PushToCalls(name, args.size(), name_token);
     return std::make_unique<CallNode>(std::move(name), std::move(args));
 }
 
@@ -220,17 +233,19 @@ NodePtr Parser::GetBody() { // NOLINT(misc-no-recursion)
         return nullptr;
     }
 
+    checker_.PushScope();
     auto scope = std::make_unique<ScopeNode>();
     while (!IsThatTokenType(lexer::TokenType::kRBrace)) {
         NodePtr body = GetOp();
         if (!body) {
-            // ReportError("Error while parsing, body of if or while is incorrect");
+            checker_.PopScope();
             return nullptr;
         }
 
         scope->AddStatement(std::move(body));
     }
 
+    checker_.PopScope();
     return scope;
 }
 
@@ -300,8 +315,13 @@ NodePtr Parser::GetPrimary() { // NOLINT(misc-no-recursion)
         return GetFunctionCall(FunctionCallModes::kWithoutSemicolon);
     }
 
-    auto variable = GetIdentifier();
-    if (variable) {
+    const lexer::Token token = GetToken();
+    if (auto variable = GetIdentifier()) {
+        if (!checker_.CheckUse(variable->GetVariable(), token)) {
+            ReportCheckerError();
+            return nullptr;
+        }
+
         return variable;
     }
 
@@ -371,6 +391,7 @@ NodePtr Parser::GetScan() {
         return nullptr;
     }
 
+    checker_.TryCreate(variable->GetVariable());
     return std::make_unique<ScanNode>(std::move(variable));
 }
 
@@ -454,6 +475,7 @@ NodePtr Parser::GetAssign() {
         return nullptr;
     }
 
+    checker_.TryCreate(lexer_->TokenToStr(name));
     return std::make_unique<AssignNode>(lexer_->TokenToStr(name), std::move(expr));
 }
 
@@ -493,9 +515,25 @@ void Parser::IncreaseTokensPos() {
     pos_++;
 }
 
-void Parser::ReportError(std::string_view error_message) const {
-    std::cout << error_message << '\n';
-    lexer_->PrintError(GetToken());
+void Parser::ReportErrorAt(std::string_view message, std::optional<lexer::Token> token) {
+    if (reported_) {
+        return;
+    }
+
+    reported_ = true;
+    std::cout << message << '\n';
+    if (token) {
+        lexer_->PrintError(*token);
+    }
+}
+
+void Parser::ReportError(std::string_view error_message) {
+    ReportErrorAt(error_message, GetToken());
+
+}
+
+void Parser::ReportCheckerError() {
+    ReportErrorAt(*checker_.GetError(), checker_.GetErrorToken());
 }
 
 OpType Parser::ToOpType(lexer::Token token) {
@@ -525,7 +563,7 @@ OpType Parser::ToOpType(lexer::Token token) {
         return OpType::kGE;
 
     default:
-        throw std::runtime_error("Error while getting OpType\n");
+        std::unreachable();
     }
 }
 

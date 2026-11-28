@@ -26,7 +26,7 @@ include_directories(${INCLUDE_DIR} ${INCLUDE_DIR}/front_end ${INCLUDE_DIR}/inter
 
 add_subdirectory(tests)
 
-add_library(front ${FRONT_DIR}/lexer.cpp ${FRONT_DIR}/parser.cpp)
+add_library(front ${FRONT_DIR}/lexer.cpp ${FRONT_DIR}/parser.cpp ${FRONT_DIR}/name_checker.cpp)
 add_library(dump ${FRONT_DIR}/dump_tree.cpp)
 add_library(interpreter ${INTERPRETER_DIR}/interpreter.cpp)
 

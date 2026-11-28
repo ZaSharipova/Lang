@@ -57,13 +57,16 @@ struct Token {
 
 class SourceBuffer {
 public:
-    SourceBuffer() = delete;
+    static SourceBuffer FromFile(const char* filepath) {
+        return SourceBuffer(MakeBufferFromFileData(filepath));
+    }
 
-    static SourceBuffer FromFile(const char* filepath);
-    static SourceBuffer FromString(const std::string& str);
+    static SourceBuffer FromString(const std::string& str) {
+        return SourceBuffer(MakeBufferFromString(str));
+    }
 
     const char* data() const { return buffer_.data(); }
-    uint32_t size() const { return buffer_.size() - 1; }
+    uint32_t size() const { return static_cast<uint32_t>(buffer_.size() - 1); }
 
     const char& operator[](std::size_t index) const { return buffer_[index]; }
     char& operator[](std::size_t index) { return buffer_[index]; }
@@ -73,15 +76,20 @@ public:
             return { 1, 1 };
         }
 
-        auto iterator = std::ranges::upper_bound(newLines_.begin(), newLines_.end(), offset);
+        auto iterator = std::ranges::upper_bound(newLines_, offset);
         std::size_t lineIdx = std::distance(newLines_.begin(), iterator);
 
         return { lineIdx, offset - newLines_[lineIdx - 1] + 1 };
     }
 
 private:
-    SourceBuffer(const std::vector<char>& buffer)
-        : buffer_ { buffer } { }
+    explicit SourceBuffer(std::vector<char> buffer)
+        : buffer_ { std::move(buffer) } {
+        BuildNewLines();
+    }
+
+    static std::vector<char> MakeBufferFromFileData(const char* filepath); // yes it can throw exception, but other solutions are even worse
+    static std::vector<char> MakeBufferFromString(const std::string& str);
 
     void BuildNewLines() {
         newLines_.clear();
@@ -89,7 +97,7 @@ private:
 
         for (std::size_t i = 0; i < buffer_.size(); ++i) {
             if (buffer_[i] == '\n') {
-                newLines_.push_back(i + 1);
+                newLines_.push_back(static_cast<uint32_t>(i + 1));
             }
         }
     }
@@ -100,12 +108,18 @@ private:
 
 class Lexer {
 public:
+    explicit Lexer(const char* filepath)
+        : buffer_(SourceBuffer::FromFile(filepath)) { }
+
+    explicit Lexer(const std::string& name)
+        : buffer_(SourceBuffer::FromString(name)) { }
+
+    explicit Lexer(SourceBuffer source)
+        : buffer_(std::move(source)) { }
+
     int64_t TokenToNum(Token token) const;
     std::string TokenToStr(Token token) const;
     void PrintError(Token token) const;
-
-    Lexer(const SourceBuffer& source)
-        : buffer_ { source } { }
 
     std::vector<Token> TokenizeAll();
 
@@ -116,7 +130,7 @@ private:
     Token LexNumber();
     Token LexPunctuation();
 
-    const SourceBuffer& buffer_;
+    SourceBuffer buffer_;
     std::size_t cursor_ = 0;
 };
 

@@ -1,5 +1,6 @@
 #include <gtest/gtest.h>
 
+#include <cstdint>
 #include <iostream>
 #include <memory>
 #include <sstream>
@@ -22,7 +23,7 @@ std::vector<NodePtr> MakeNodeList(Nodes&&... nodes) {
     return node_list;
 }
 
-auto MakeValue(int value) {
+auto MakeValue(uint64_t value) {
     return std::make_unique<ValueNode>(value);
 }
 
@@ -32,6 +33,20 @@ auto MakeVariable(const std::string& name) {
 
 auto MakeOp(OpType type, NodePtr left, NodePtr right) {
     return std::make_unique<OpNode>(type, std::move(left), std::move(right));
+}
+
+// ValueNode is unsigned, so negative literals are built as (0 - |value|).
+NodePtr MakeSigned(int64_t value) {
+    if (value >= 0) {
+        return MakeValue(static_cast<uint64_t>(value));
+    }
+    return MakeOp(OpType::kSub, MakeValue(0), MakeValue(static_cast<uint64_t>(-value)));
+}
+
+// The only runtime error the interpreter still detects on its own is division by zero.
+// Undefined names, wrong call arity, etc. are rejected by the parser.
+NodePtr MakeFail() {
+    return MakeOp(OpType::kDiv, MakeValue(1), MakeValue(0));
 }
 
 auto MakeAssign(const std::string& name, NodePtr expression) {
@@ -142,10 +157,6 @@ TEST_F(InterpreterTest, ValuePrinted) {
     EXPECT_EQ(Output(), "42");
 }
 
-TEST_F(InterpreterTest, UndefinedVariableIsError) {
-    EXPECT_EQ(RunMain(MakeAssign("result", MakeVariable("x"))), Status::kError);
-}
-
 TEST_F(InterpreterTest, DefinedVariableReadable) {
     EXPECT_EQ(RunMain(MakeAssign("x", MakeValue(7)), MakePrint(MakeVariable("x"))), Status::kOk);
     EXPECT_EQ(Output(), "7");
@@ -153,9 +164,9 @@ TEST_F(InterpreterTest, DefinedVariableReadable) {
 
 struct OpTestCase {
     OpType type;
-    int left;
-    int right;
-    int expected;
+    int64_t left;
+    int64_t right;
+    int64_t expected;
     const char* name;
 };
 
@@ -164,7 +175,7 @@ class OpTest : public InterpreterTest, public ::testing::WithParamInterface<OpTe
 TEST_P(OpTest, Evaluates) {
     const OpTestCase& test_case = GetParam();
     const Status status = RunMain(
-        MakePrint(MakeOp(test_case.type, MakeValue(test_case.left), MakeValue(test_case.right))));
+        MakePrint(MakeOp(test_case.type, MakeSigned(test_case.left), MakeSigned(test_case.right))));
     ASSERT_EQ(status, Status::kOk);
     EXPECT_EQ(Output(), std::to_string(test_case.expected));
 }
@@ -209,12 +220,12 @@ TEST_F(InterpreterTest, ModuloByZeroIsError) {
 }
 
 TEST_F(InterpreterTest, ErrorInLeftOperandPropagates) {
-    EXPECT_EQ(RunMain(MakeAssign("result", MakeOp(OpType::kAdd, MakeVariable("missing"), MakeValue(1)))),
+    EXPECT_EQ(RunMain(MakeAssign("result", MakeOp(OpType::kAdd, MakeFail(), MakeValue(1)))),
         Status::kError);
 }
 
 TEST_F(InterpreterTest, ErrorInRightOperandPropagates) {
-    EXPECT_EQ(RunMain(MakeAssign("result", MakeOp(OpType::kAdd, MakeValue(1), MakeVariable("missing")))),
+    EXPECT_EQ(RunMain(MakeAssign("result", MakeOp(OpType::kAdd, MakeValue(1), MakeFail()))),
         Status::kError);
 }
 
@@ -248,12 +259,6 @@ TEST_F(InterpreterTest, AssignFromExpression) {
     EXPECT_EQ(Output(), "6");
 }
 
-TEST_F(InterpreterTest, FailedAssignDoesNotCreateVariable) {
-    EXPECT_EQ(RunMain(MakeAssign("a", MakeVariable("missing")), MakePrint(MakeVariable("a"))),
-        Status::kError);
-    EXPECT_EQ(Output(), "Undefined variable: missing\n");
-}
-
 TEST_F(InterpreterTest, ScanReadsValue) {
     SetInput("17");
     EXPECT_EQ(RunMain(MakeScan("x"), MakePrint(MakeVariable("x"))), Status::kOk);
@@ -272,16 +277,6 @@ TEST_F(InterpreterTest, PrintMultipleValues) {
     EXPECT_EQ(RunMain(MakePrint(MakeValue(1)), MakePrint(MakeValue(2)), MakePrint(MakeValue(3))),
         Status::kOk);
     EXPECT_EQ(Output(), "123");
-}
-
-TEST_F(InterpreterTest, PrintUndefinedVariableIsError) {
-    EXPECT_EQ(RunMain(MakePrint(MakeVariable("missing"))), Status::kError);
-    EXPECT_EQ(Output(), "Undefined variable: missing\n");
-}
-
-TEST_F(InterpreterTest, InnerVariableNotVisibleOutside) {
-    EXPECT_EQ(RunMain(MakeScope(MakeAssign("x", MakeValue(1))), MakeAssign("copy", MakeVariable("x"))),
-        Status::kError);
 }
 
 TEST_F(InterpreterTest, InnerScopeSeesOuterVariable) {
@@ -306,10 +301,10 @@ TEST_F(InterpreterTest, ReturnStopsScope) {
 
 TEST_F(InterpreterTest, ErrorStopsScope) {
     EXPECT_EQ(RunMain(MakePrint(MakeValue(1)),
-                  MakeAssign("a", MakeVariable("missing")),
+                  MakeAssign("a", MakeFail()),
                   MakePrint(MakeValue(2))),
         Status::kError);
-    EXPECT_EQ(Output(), "1Undefined variable: missing\n");
+    EXPECT_EQ(Output(), "1division by zero\n");
 }
 
 TEST_F(InterpreterTest, IfTrueRunsBody) {
@@ -339,9 +334,9 @@ TEST_F(InterpreterTest, IfTrueSkipsElse) {
 }
 
 TEST_F(InterpreterTest, IfConditionError) {
-    EXPECT_EQ(RunMain(MakeIf(MakeVariable("missing"), MakeScope(MakePrint(MakeValue(1))))),
+    EXPECT_EQ(RunMain(MakeIf(MakeFail(), MakeScope(MakePrint(MakeValue(1))))),
         Status::kError);
-    EXPECT_EQ(Output(), "Undefined variable: missing\n");
+    EXPECT_EQ(Output(), "division by zero\n");
 }
 
 TEST_F(InterpreterTest, ReturnInsideIfStopsExecution) {
@@ -372,12 +367,12 @@ TEST_F(InterpreterTest, ReturnInsideWhileExitsLoop) {
 }
 
 TEST_F(InterpreterTest, WhileConditionError) {
-    EXPECT_EQ(RunMain(MakeWhile(MakeVariable("missing"), MakeScope())), Status::kError);
+    EXPECT_EQ(RunMain(MakeWhile(MakeFail(), MakeScope())), Status::kError);
 }
 
 TEST_F(InterpreterTest, WhileBodyError) {
     EXPECT_EQ(RunMain(MakeWhile(MakeValue(1),
-                  MakeScope(MakeAssign("a", MakeVariable("missing"))))),
+                  MakeScope(MakeAssign("a", MakeFail())))),
         Status::kError);
 }
 
@@ -406,26 +401,15 @@ TEST_F(InterpreterTest, BareReturnYieldsZero) {
     EXPECT_EQ(Output(), "0");
 }
 
-TEST_F(InterpreterTest, CallUnknownFunction) {
-    EXPECT_EQ(RunMain(MakeAssign("result", MakeCall("missing"))), Status::kError);
-}
-
-TEST_F(InterpreterTest, CallWithWrongArgumentCount) {
-    auto identity_function = MakeFunction("identity", { "value" }, MakeScope(MakeReturn(MakeVariable("value"))));
-    auto main_function = MakeFunction(
-        "main", { }, MakeScope(MakeAssign("result", MakeCall("identity", MakeValue(1), MakeValue(2)))));
-    EXPECT_EQ(RunProgram(std::move(identity_function), std::move(main_function)), Status::kError);
-}
-
 TEST_F(InterpreterTest, CallArgumentError) {
     auto identity_function = MakeFunction("identity", { "value" }, MakeScope(MakeReturn(MakeVariable("value"))));
     auto main_function = MakeFunction(
-        "main", { }, MakeScope(MakeAssign("result", MakeCall("identity", MakeVariable("missing")))));
+        "main", { }, MakeScope(MakeAssign("result", MakeCall("identity", MakeFail()))));
     EXPECT_EQ(RunProgram(std::move(identity_function), std::move(main_function)), Status::kError);
 }
 
 TEST_F(InterpreterTest, ErrorInsideCalleeBodyPropagates) {
-    auto broken_function = MakeFunction("broken", { }, MakeScope(MakeReturn(MakeVariable("missing"))));
+    auto broken_function = MakeFunction("broken", { }, MakeScope(MakeReturn(MakeFail())));
     auto main_function = MakeFunction("main", { }, MakeScope(MakeAssign("result", MakeCall("broken"))));
     EXPECT_EQ(RunProgram(std::move(broken_function), std::move(main_function)), Status::kError);
 }
@@ -442,16 +426,6 @@ TEST_F(InterpreterTest, RecursionFactorial) {
     auto main_function = MakeFunction("main", { }, MakeScope(MakePrint(MakeCall("factorial", MakeValue(5)))));
     EXPECT_EQ(RunProgram(std::move(factorial_function), std::move(main_function)), Status::kOk);
     EXPECT_EQ(Output(), "120");
-}
-
-TEST_F(InterpreterTest, CalleeLocalsDoNotLeakToCaller) {
-    auto define_local_function = MakeFunction("define_local", { }, MakeScope(MakeAssign("local", MakeValue(1))));
-    auto main_function = MakeFunction(
-        "main", { },
-        MakeScope(MakeAssign("result", MakeCall("define_local")),
-            MakeAssign("copy", MakeVariable("local"))));
-    EXPECT_EQ(RunProgram(std::move(define_local_function), std::move(main_function)),
-        Status::kError);
 }
 
 TEST_F(InterpreterTest, ParameterDoesNotModifyCallerVariable) {
@@ -483,26 +457,6 @@ TEST_F(InterpreterTest, ReturnInsideLoopInsideFunction) {
     EXPECT_EQ(Output(), "3");
 }
 
-TEST_F(InterpreterTest, ProgramWithoutMain) {
-    auto other_function = MakeFunction("other", { }, MakeScope());
-    EXPECT_EQ(RunProgram(std::move(other_function)), Status::kError);
-}
-
-TEST_F(InterpreterTest, MainWithParametersIsError) {
-    auto main_function = MakeFunction("main", { "argc" }, MakeScope());
-    EXPECT_EQ(RunProgram(std::move(main_function)), Status::kError);
-}
-
-TEST_F(InterpreterTest, FunctionRedefinitionIsError) {
-    auto first_definition = MakeFunction("duplicate", { }, MakeScope());
-    auto second_definition = MakeFunction("duplicate", { }, MakeScope());
-    auto main_function = MakeFunction("main", { }, MakeScope());
-    EXPECT_EQ(RunProgram(std::move(first_definition),
-                  std::move(second_definition),
-                  std::move(main_function)),
-        Status::kError);
-}
-
 TEST_F(InterpreterTest, MainReturnIsOk) {
     EXPECT_EQ(RunMain(MakeReturn(MakeValue(5))), Status::kOk);
 }
@@ -521,55 +475,6 @@ TEST_F(InterpreterTest, RunInterpreterReturnsTrueOnSuccess) {
 TEST_F(InterpreterTest, RunInterpreterReturnsTrueOnMainReturn) {
     auto main_function = MakeFunction("main", { }, MakeScope(MakeReturn(MakeValue(5))));
     EXPECT_TRUE(RunWithInterpreterEntryPoint(std::move(main_function)));
-}
-
-TEST_F(InterpreterTest, RunInterpreterReportsUndefinedVariable) {
-    auto main_function = MakeFunction("main", { }, MakeScope(MakeAssign("y", MakeVariable("x"))));
-    EXPECT_FALSE(RunWithInterpreterEntryPoint(std::move(main_function)));
-    EXPECT_TRUE(OutputContains("Undefined variable: x"));
-}
-
-TEST_F(InterpreterTest, RunInterpreterReportsUnknownFunction) {
-    auto main_function = MakeFunction("main", { }, MakeScope(MakeAssign("result", MakeCall("missing"))));
-    EXPECT_FALSE(RunWithInterpreterEntryPoint(std::move(main_function)));
-    EXPECT_TRUE(OutputContains("Function not found: missing"));
-}
-
-TEST_F(InterpreterTest, RunInterpreterReportsWrongArgumentCount) {
-    auto identity_function = MakeFunction("identity", { "value" }, MakeScope(MakeReturn(MakeVariable("value"))));
-    auto main_function = MakeFunction(
-        "main", { }, MakeScope(MakeAssign("result", MakeCall("identity", MakeValue(1), MakeValue(2)))));
-    EXPECT_FALSE(
-        RunWithInterpreterEntryPoint(std::move(identity_function), std::move(main_function)));
-    EXPECT_TRUE(OutputContains("Function identity expects 1 arguments, got 2"));
-}
-
-TEST_F(InterpreterTest, RunInterpreterReportsMissingMain) {
-    auto other_function = MakeFunction("other", { }, MakeScope());
-    EXPECT_FALSE(RunWithInterpreterEntryPoint(std::move(other_function)));
-    EXPECT_TRUE(OutputContains("Function 'main' not found"));
-}
-
-TEST_F(InterpreterTest, RunInterpreterReportsMainWithParameters) {
-    auto main_function = MakeFunction("main", { "argc" }, MakeScope());
-    EXPECT_FALSE(RunWithInterpreterEntryPoint(std::move(main_function)));
-    EXPECT_TRUE(OutputContains("Function 'main' must have no parameters"));
-}
-
-TEST_F(InterpreterTest, RunInterpreterReportsFunctionRedefinition) {
-    auto first_definition = MakeFunction("duplicate", { }, MakeScope());
-    auto second_definition = MakeFunction("duplicate", { }, MakeScope());
-    auto main_function = MakeFunction("main", { }, MakeScope());
-    EXPECT_FALSE(RunWithInterpreterEntryPoint(std::move(first_definition),
-        std::move(second_definition),
-        std::move(main_function)));
-    EXPECT_TRUE(OutputContains("Redefinition of function: duplicate"));
-}
-
-TEST_F(InterpreterTest, RunInterpreterReportsPrintOfUndefinedVariable) {
-    auto main_function = MakeFunction("main", { }, MakeScope(MakePrint(MakeVariable("ghost"))));
-    EXPECT_FALSE(RunWithInterpreterEntryPoint(std::move(main_function)));
-    EXPECT_TRUE(OutputContains("Undefined variable: ghost"));
 }
 
 TEST_F(InterpreterTest, RunInterpreterReportsDivisionByZero) {
@@ -600,25 +505,24 @@ TEST_F(InterpreterTest, ErrorInDeepRecursionStopsExecution) {
         "fail", { "n" },
         MakeScope(
             MakeIf(MakeOp(OpType::kEQ, MakeVariable("n"), MakeValue(0)),
-                MakeScope(MakeReturn(MakeVariable("missing")))),
+                MakeScope(MakeReturn(MakeFail()))),
             MakeReturn(MakeCall("fail", MakeOp(OpType::kSub, MakeVariable("n"), MakeValue(1))))));
     auto main_function = MakeFunction("main", { },
         MakeScope(MakePrint(MakeCall("fail", MakeValue(1000))), MakePrint(MakeValue(1))));
     EXPECT_EQ(RunProgram(std::move(fail_function), std::move(main_function)), Status::kError);
-    EXPECT_EQ(Output(), "Undefined variable: missing\n");
+    EXPECT_EQ(Output(), "division by zero\n");
 }
 
 TEST_F(InterpreterTest, MainReturnZeroDoesNotHideError) {
     auto main_function = MakeFunction("main", { },
-        MakeScope(MakePrint(MakeCall("missing", MakeValue(10))), MakeReturn(MakeValue(0))));
+        MakeScope(MakePrint(MakeFail()), MakeReturn(MakeValue(0))));
     EXPECT_FALSE(RunWithInterpreterEntryPoint(std::move(main_function)));
-    EXPECT_EQ(Output(), "Function not found: missing\n");
+    EXPECT_EQ(Output(), "division by zero\n");
 }
 
 TEST_F(InterpreterTest, OnlyFirstErrorIsReported) {
-    EXPECT_EQ(RunMain(MakePrint(MakeVariable("first")), MakePrint(MakeVariable("second"))),
-        Status::kError);
-    EXPECT_EQ(Output(), "Undefined variable: first\n");
+    EXPECT_EQ(RunMain(MakePrint(MakeFail()), MakePrint(MakeFail())), Status::kError);
+    EXPECT_EQ(Output(), "division by zero\n");
 }
 
 TEST_F(InterpreterTest, ArgumentsEvaluatedLeftToRight) {
@@ -750,11 +654,11 @@ TEST_F(InterpreterTest, InterpreterCanBeReused) {
 }
 
 TEST_F(InterpreterTest, ErrorIsResetBetweenRuns) {
-    auto broken_main = MakeFunction("main", { }, MakeScope(MakePrint(MakeVariable("missing"))));
+    auto broken_main = MakeFunction("main", { }, MakeScope(MakePrint(MakeFail())));
     EXPECT_FALSE(RunWithInterpreterEntryPoint(std::move(broken_main)));
     auto good_main = MakeFunction("main", { }, MakeScope(MakePrint(MakeValue(1))));
     EXPECT_TRUE(RunWithInterpreterEntryPoint(std::move(good_main)));
-    EXPECT_EQ(Output(), "Undefined variable: missing\n1");
+    EXPECT_EQ(Output(), "division by zero\n1");
 }
 
 } // namespace

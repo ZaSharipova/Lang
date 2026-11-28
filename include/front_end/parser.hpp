@@ -7,6 +7,7 @@
 
 #include "lexer.hpp"
 #include "node.hpp"
+#include "name_checker.hpp"
 
 /* G          ::= FUNCTION_D+
    FUNCTION_D ::= V "(" [ E {"," E}* ] ")" "{" OP* "}"
@@ -36,9 +37,15 @@ using NodePtr = std::unique_ptr<INode>;
 
 class Parser {
 public:
-    Parser(const lexer::Lexer* lexer, std::vector<lexer::Token> tokens)
-        : lexer_(lexer)
-        , tokens_(std::move(tokens)) { }
+    explicit Parser(const char* filepath)
+            : lexer_(std::make_unique<lexer::Lexer>(filepath)) {
+            tokens_ = lexer_->TokenizeAll();
+    }
+
+    explicit Parser(const std::string& name)
+            : lexer_(std::make_unique<lexer::Lexer>(name)) {
+            tokens_ = lexer_->TokenizeAll();
+    }
 
     NodePtr Parse();
 
@@ -74,11 +81,15 @@ private:
     lexer::Token GetNextToken();
     bool IsThatTokenType(lexer::TokenType type);
     void IncreaseTokensPos();
-    void ReportError(std::string_view error_message) const;
+    void ReportErrorAt(std::string_view message, std::optional<lexer::Token> token);
+    void ReportError(std::string_view error_message);
+    void ReportCheckerError();
 
-    const lexer::Lexer* lexer_ = nullptr;
+    std::unique_ptr<lexer::Lexer> lexer_;
     std::vector<lexer::Token> tokens_;
     std::size_t pos_ = 0;
+    bool reported_ = false;
+    NameChecker checker_{};
 };
 
 } // namespace paracl::parser

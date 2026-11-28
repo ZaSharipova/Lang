@@ -44,9 +44,10 @@ public:
 
         if (error_) {
             std::cout << *error_ << '\n';
+            return false;
         }
 
-        return !error_;
+        return true;
     }
 
     Status Visit(const ValueNode& node) override;
@@ -68,8 +69,9 @@ private:
         functionTable_.clear();
         tasks_.clear();
         values_.clear();
-        return_value_ = 0;
+        env_.ClearContextFields();
         error_.reset();
+        return_value_ = 0;
     }
 
     void PushToTasks(TaskType type, const INode* node = nullptr) {

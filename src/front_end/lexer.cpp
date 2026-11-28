@@ -44,10 +44,10 @@ bool IsAlnum(char character) {
 
 } // namespace anonymous
 
-SourceBuffer SourceBuffer::FromFile(const char* filepath) {
+std::vector<char> SourceBuffer::MakeBufferFromFileData(const char* filepath) {
     std::ifstream file(filepath, std::ios::ate | std::ios::binary);
     if (!file.is_open()) {
-        throw std::runtime_error(std::string("file") + filepath + "didnt open");
+        throw std::runtime_error(std::string("file") + filepath + "didnt open"); // TODO
     }
 
     // Запромчено
@@ -65,21 +65,14 @@ SourceBuffer SourceBuffer::FromFile(const char* filepath) {
     }
 
     buffer[size] = '\0';
-
-    SourceBuffer sourceBuf(buffer);
-    sourceBuf.BuildNewLines();
-
-    return sourceBuf;
+    return buffer;
 }
 
-SourceBuffer SourceBuffer::FromString(const std::string& str) {
+std::vector<char> SourceBuffer::MakeBufferFromString(const std::string& str) {
     std::vector<char> buffer(str.begin(), str.end());
     buffer.push_back('\0');
 
-    SourceBuffer sourceBuf(buffer);
-    sourceBuf.BuildNewLines();
-
-    return sourceBuf;
+    return buffer;
 }
 
 int64_t Lexer::TokenToNum(Token token) const {
